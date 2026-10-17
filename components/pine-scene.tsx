@@ -145,12 +145,12 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
     fogDensity: 0.24,
     complete: false,
     phase: "title",
-    seed: { x: 0.85, y: 1.4, z: 5, scale: 0, opacity: 0, visible: false },
+    seed: { x: 0.06, y: 3.85, z: 0, scale: 0, opacity: 0, visible: false },
   }), []);
 
   return (
     <Canvas
-      camera={{ position: [0.85, 1.4, 14.2], fov: 38, near: 0.1, far: 80 }}
+      camera={{ position: [1.48, 1.05, 14.2], fov: 38, near: 0.1, far: 80 }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
       performance={{ min: 0.6 }}
@@ -198,7 +198,7 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     intro.progress = 0;
     intro.complete = false;
     intro.phase = "title";
-    Object.assign(intro.seed, { x: 0.85, y: 1.4, z: 5, scale: 0, opacity: 0, visible: false });
+    Object.assign(intro.seed, { x: 0.06, y: 3.85, z: 0, scale: 0, opacity: 0, visible: false });
     gsap.set(title, { opacity: 0, scale: 0.94, filter: "blur(12px)" });
 
     const timeline = gsap.timeline();
@@ -206,37 +206,38 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     timeline.to({}, { duration: 0.32 });
     timeline.to(title, {
       opacity: 0,
-      scale: 0.035,
-      filter: "blur(8px)",
+      scale: 0.84,
+      filter: "blur(12px)",
       duration: 0.68,
-      ease: "power3.in",
+      ease: "power2.in",
       onStart: () => { intro.phase = "seed"; },
     });
     timeline.to(intro.seed, {
-      scale: 0.14,
+      scale: 1,
       opacity: 1,
-      duration: 0.24,
-      ease: "back.out(2.2)",
+      duration: 0.56,
+      ease: "power2.out",
       onStart: () => { intro.seed.visible = true; },
-    }, "<+=0.38");
+    }, "<+=0.12");
     timeline.to(intro.seed, {
-      x: 1.51,
-      y: -2.8,
-      z: 0,
-      duration: 1.2,
-      ease: "bounce.out",
+      y: 0,
+      duration: 1.08,
+      ease: "power2.in",
       onStart: () => { intro.phase = "drop"; },
     });
+    timeline.to({}, { duration: 0.1 });
     timeline.to(intro.seed, {
-      scale: 0,
+      y: -0.3,
+      scale: 0.08,
       opacity: 0,
-      duration: 0.12,
+      duration: 0.42,
       ease: "power2.in",
-      onComplete: () => {
-        intro.seed.visible = false;
-        intro.phase = "sprout";
-        intro.elapsed = 0;
-      },
+      onComplete: () => { intro.seed.visible = false; },
+    });
+    timeline.eventCallback("onComplete", () => {
+      intro.seed.visible = false;
+      intro.phase = "sprout";
+      intro.elapsed = 0;
     });
 
     return () => {
@@ -274,6 +275,29 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
 
 function SeedParticle({ intro }: { intro: IntroTimeline }) {
   const seedRef = useRef<THREE.Mesh>(null);
+  const geometry = useMemo(() => {
+    const seedGeometry = new THREE.SphereGeometry(0.14, 36, 28);
+    const position = seedGeometry.getAttribute("position");
+    for (let index = 0; index < position.count; index++) {
+      const x = position.getX(index);
+      const y = position.getY(index);
+      const z = position.getZ(index);
+      const normalizedY = y / 0.14;
+      const angle = Math.atan2(z, x);
+      const irregularity = 1
+        + Math.sin(angle * 3 + normalizedY * 4.2) * 0.045
+        + Math.cos(angle * 5 - normalizedY * 2.7) * 0.022;
+      const pulledTip = Math.pow(Math.max(normalizedY, 0), 3) * 0.12;
+      const flattenedBase = Math.pow(Math.max(-normalizedY - 0.72, 0), 2) * 0.018;
+      position.setXYZ(index, x * irregularity, y + pulledTip + flattenedBase, z * irregularity);
+    }
+    position.needsUpdate = true;
+    seedGeometry.computeVertexNormals();
+    seedGeometry.computeBoundingSphere();
+    return seedGeometry;
+  }, []);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   useFrame(() => {
     const seed = seedRef.current;
@@ -287,10 +311,11 @@ function SeedParticle({ intro }: { intro: IntroTimeline }) {
   });
 
   return (
-    <mesh ref={seedRef} visible={false} renderOrder={10}>
-      <sphereGeometry args={[1, 24, 18]} />
-      <meshBasicMaterial color="#0b0b0a" transparent opacity={0} depthWrite={false} fog={false} />
-    </mesh>
+    <group position={[1.45, -2.8, 0]}>
+      <mesh ref={seedRef} geometry={geometry} visible={false} renderOrder={10}>
+        <meshBasicMaterial color="#080807" transparent opacity={0} depthWrite={false} fog={false} />
+      </mesh>
+    </group>
   );
 }
 
@@ -383,7 +408,7 @@ function CameraController({
       onIntroComplete();
     }
 
-    const cameraX = THREE.MathUtils.lerp(0.85, 1.48, trunkZoom);
+    const cameraX = 1.48;
     const cameraZ = THREE.MathUtils.lerp(14.2, 1.85, trunkZoom);
     baseCamera.set(cameraX, cameraY, cameraZ);
     baseTarget.set(cameraX, THREE.MathUtils.lerp(cameraY, 1.45, trunkZoom), 0);
