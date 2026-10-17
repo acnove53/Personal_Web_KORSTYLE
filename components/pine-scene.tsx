@@ -160,7 +160,7 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
         />
       </EffectComposer>
       <ScrollControls pages={3} damping={0.16} maxSpeed={0.9} distance={1}>
-        <ScrollCamera
+        <CameraController
           intro={intro}
           onIntroComplete={onIntroComplete}
           onStageChange={handleStage}
@@ -200,7 +200,7 @@ function IntroSequence({ intro }: { intro: IntroTimeline }) {
   return null;
 }
 
-function ScrollCamera({
+function CameraController({
   intro,
   onIntroComplete,
   onStageChange,
@@ -220,6 +220,7 @@ function ScrollCamera({
   const introCompleteNotified = useRef(false);
   const zoom = useRef(0);
   const introZoom = useRef(0);
+  const rawScrollOffset = useRef(0.5);
   const focusNode = useRef<PortfolioNode | null>(null);
   const dismissedNode = useRef<string | null>(null);
   const baseCamera = useMemo(() => new THREE.Vector3(), []);
@@ -231,20 +232,34 @@ function ScrollCamera({
 
   useEffect(() => {
     const element = scroll.el;
-    const center = () => {
+    const syncScrollInput = () => {
       const maxScroll = element.scrollHeight - element.clientHeight;
-      element.scrollTop = maxScroll * 0.5;
+      if (maxScroll > 0) {
+        rawScrollOffset.current = THREE.MathUtils.clamp(element.scrollTop / maxScroll, 0, 1);
+      }
     };
-    const frame = requestAnimationFrame(() => requestAnimationFrame(center));
+    const centerAtTrunk = () => {
+      const maxScroll = element.scrollHeight - element.clientHeight;
+      if (maxScroll > 0) element.scrollTop = maxScroll * 0.5;
+      syncScrollInput();
+    };
+    element.addEventListener("scroll", syncScrollInput, { passive: true });
+    const frame = requestAnimationFrame(() => requestAnimationFrame(centerAtTrunk));
     onConnectScroll((stage) => {
       const maxScroll = element.scrollHeight - element.clientHeight;
       const target = stage === "branches" ? 0.04 : stage === "trunk" ? 0.5 : 0.96;
-      element.scrollTo({ top: maxScroll * target, behavior: "smooth" });
+      if (maxScroll > 0) element.scrollTo({ top: maxScroll * target, behavior: "smooth" });
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      element.removeEventListener("scroll", syncScrollInput);
+    };
   }, [onConnectScroll, scroll.el]);
 
   useFrame(({ camera }, delta) => {
+    // Keep Drei's offset synchronized with its actual scroll element so both
+    // wheel input and menu-driven scrollTo calls feed this camera controller.
+    scroll.offset = rawScrollOffset.current;
     const offset = scroll.offset;
     const stage: StageName = offset < 0.37 ? "branches" : offset > 0.63 ? "roots" : "trunk";
     if (intro.complete && stage !== lastStage.current) {
@@ -293,7 +308,9 @@ function ScrollCamera({
       if (!selectedNode && zoom.current < 0.012) focusNode.current = null;
     }
 
-    camera.position.copy(cameraPosition);
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, cameraPosition.x, 5, delta);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, cameraPosition.y, 5, delta);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, cameraPosition.z, 5, delta);
     camera.lookAt(lookTarget);
   });
 
