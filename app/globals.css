@@ -70,6 +70,15 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--stamp); outline
 .index-bottom { margin-top: 19px; color: #aaa39b; font: 7px/1.8 var(--mono); letter-spacing: .1em; }
 
 .chapter-intro { left: 17.3vw; top: 50%; width: min(490px, 41vw); translate: 0 -48%; }
+.chapter-intro.chapter-trunk { left: 50%; top: 50%; width: min(790px, 82vw); translate: -50% -50%; text-align: center; }
+.chapter-intro.chapter-trunk .eyebrow { justify-content: center; color: rgba(249,248,246,.72); }
+.chapter-intro.chapter-trunk h1 { color: #f9f8f6; font-size: clamp(48px, 6.8vw, 88px); text-shadow: 0 2px 18px rgba(0,0,0,.48); }
+.chapter-intro.chapter-trunk .chapter-tagline { color: rgba(249,248,246,.92); text-shadow: 0 1px 9px rgba(0,0,0,.65); }
+.chapter-intro.chapter-trunk .hero-summary { max-width: 590px; margin-right: auto; margin-left: auto; color: rgba(249,248,246,.82); text-shadow: 0 1px 8px rgba(0,0,0,.8); }
+.chapter-intro.chapter-trunk .hero-actions { justify-content: center; }
+.chapter-intro.chapter-trunk .text-action { color: #f9f8f6; border-color: rgba(249,248,246,.8); text-shadow: 0 1px 6px rgba(0,0,0,.55); }
+.chapter-intro.chapter-trunk .text-action:hover { color: #f29b88; border-color: #f29b88; }
+.chapter-intro.chapter-trunk .hero-location { color: rgba(249,248,246,.72); text-shadow: 0 1px 6px rgba(0,0,0,.55); }
 .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 25px; color: #76716b; font: 9px var(--mono); letter-spacing: .16em; }
 .eyebrow-seal { display: grid; place-items: center; width: 20px; height: 20px; color: var(--stamp); border: 1px solid rgba(217,56,30,.75); font: 12px var(--serif); }
 .chapter-intro h1 { margin: 0; font: 400 clamp(42px, 5.25vw, 75px)/1.07 var(--serif); letter-spacing: -.055em; }
@@ -165,6 +174,7 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--stamp); outline
   .stage-link-name { font-size: 10px; }
   .stage-link-dot { display: none; }
   .chapter-intro { left: 20px; top: 45%; width: min(88vw, 420px); translate: 0 -50%; }
+  .chapter-intro.chapter-trunk { left: 50%; top: 50%; width: min(92vw, 620px); translate: -50% -50%; }
   .chapter-intro h1 { font-size: clamp(42px, 12vw, 62px); }
   .eyebrow { margin-bottom: 17px; font-size: 8px; }
   .chapter-tagline { max-width: 290px; margin-top: 16px; font-size: 12px; }

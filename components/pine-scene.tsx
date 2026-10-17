@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { ThreeEvent } from "@react-three/fiber";
-import { CameraControls, CameraControlsImpl, Html, ScrollControls, useScroll } from "@react-three/drei";
+import { Html, ScrollControls, useScroll } from "@react-three/drei";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 export type StageName = "branches" | "trunk" | "roots";
@@ -216,24 +216,18 @@ function ScrollCamera({
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
 }) {
   const scroll = useScroll();
-  const controls = useRef<CameraControlsImpl>(null);
   const lastStage = useRef<StageName>("trunk");
-  const lastCameraCommand = useRef<string>("");
   const introCompleteNotified = useRef(false);
   const zoom = useRef(0);
   const introZoom = useRef(0);
   const focusNode = useRef<PortfolioNode | null>(null);
   const dismissedNode = useRef<string | null>(null);
-  const normalCamera = useMemo(() => new THREE.Vector3(), []);
-  const normalTarget = useMemo(() => new THREE.Vector3(), []);
+  const baseCamera = useMemo(() => new THREE.Vector3(), []);
+  const baseTarget = useMemo(() => new THREE.Vector3(), []);
   const focusedCamera = useMemo(() => new THREE.Vector3(), []);
   const focusedTarget = useMemo(() => new THREE.Vector3(), []);
   const cameraPosition = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
-  const cameraBase = useMemo(() => new THREE.Vector3(), []);
-  const targetBase = useMemo(() => new THREE.Vector3(), []);
-  const trunkCamera = useMemo(() => new THREE.Vector3(1.12, 2.18, 8.9), []);
-  const trunkLookAt = useMemo(() => new THREE.Vector3(1.35, 1.62, 0), []);
 
   useEffect(() => {
     const element = scroll.el;
@@ -250,7 +244,7 @@ function ScrollCamera({
     return () => cancelAnimationFrame(frame);
   }, [onConnectScroll, scroll.el]);
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const offset = scroll.offset;
     const stage: StageName = offset < 0.37 ? "branches" : offset > 0.63 ? "roots" : "trunk";
     if (intro.complete && stage !== lastStage.current) {
@@ -267,75 +261,43 @@ function ScrollCamera({
     const targetZoom = selectedNode ? 1 : 0;
     zoom.current = THREE.MathUtils.damp(zoom.current, targetZoom, selectedNode ? 2.5 : 3.4, delta);
 
-    const baseY = (0.5 - offset) * 6.9 + 1.05;
-    const baseX = 0.85;
-    normalCamera.set(baseX, baseY + 0.2, 14.2);
-    normalTarget.set(baseX, baseY, 0);
-    cameraPosition.copy(normalCamera);
-    lookTarget.copy(normalTarget);
-
+    // The center page is the trunk; offset 0 is the canopy and 1 is the roots.
+    // Camera Y is assigned directly from ScrollControls every frame.
+    const cameraY = THREE.MathUtils.lerp(4.5, -2.4, offset);
     const centered = Math.abs(offset - 0.5) < 0.16;
     const introZoomTarget = intro.complete && centered ? 1 : 0;
     introZoom.current = THREE.MathUtils.damp(introZoom.current, introZoomTarget, 1.8, delta);
-    if (!introCompleteNotified.current && introZoomTarget === 1 && introZoom.current > 0.985) {
+    const trunkProximity = 1 - smoothStep(0.015, 0.18, Math.abs(offset - 0.5));
+    const trunkZoom = introZoom.current * trunkProximity;
+    if (!introCompleteNotified.current && trunkZoom > 0.985) {
       introCompleteNotified.current = true;
       onIntroComplete();
     }
-    cameraPosition.lerpVectors(normalCamera, trunkCamera, introZoom.current);
-    lookTarget.lerpVectors(normalTarget, trunkLookAt, introZoom.current);
-    cameraBase.copy(cameraPosition);
-    targetBase.copy(lookTarget);
+
+    const cameraX = THREE.MathUtils.lerp(0.85, 1.48, trunkZoom);
+    const cameraZ = THREE.MathUtils.lerp(14.2, 1.85, trunkZoom);
+    baseCamera.set(cameraX, cameraY, cameraZ);
+    baseTarget.set(cameraX, THREE.MathUtils.lerp(cameraY, 1.45, trunkZoom), 0);
+    cameraPosition.copy(baseCamera);
+    lookTarget.copy(baseTarget);
 
     if (focusNode.current) {
       const focus = focusNode.current;
       const nodeX = 1.45 + focus.position[0];
       const nodeY = -2.8 + focus.position[1];
       const nodeZ = focus.position[2];
-      focusedCamera.set(nodeX + 1.15, nodeY + 0.28, 14.2 - 7.0 * zoom.current);
-      focusedTarget.set(nodeX + 1.55, nodeY, nodeZ);
-      cameraPosition.lerpVectors(cameraBase, focusedCamera, zoom.current);
-      lookTarget.lerpVectors(targetBase, focusedTarget, zoom.current);
+      focusedCamera.set(nodeX, cameraY, 6.5);
+      focusedTarget.set(nodeX, nodeY, nodeZ);
+      cameraPosition.lerpVectors(baseCamera, focusedCamera, zoom.current);
+      lookTarget.lerpVectors(baseTarget, focusedTarget, zoom.current);
       if (!selectedNode && zoom.current < 0.012) focusNode.current = null;
     }
 
-    const commandKey = `${Math.round(offset * 10000)}-${introZoom.current.toFixed(3)}-${zoom.current.toFixed(3)}-${selectedNode?.id ?? ""}`;
-    if (controls.current && commandKey !== lastCameraCommand.current) {
-      controls.current.setLookAt(
-        cameraPosition.x,
-        cameraPosition.y,
-        cameraPosition.z,
-        lookTarget.x,
-        lookTarget.y,
-        lookTarget.z,
-        false,
-      );
-      lastCameraCommand.current = commandKey;
-    }
+    camera.position.copy(cameraPosition);
+    camera.lookAt(lookTarget);
   });
 
-  return (
-    <CameraControls
-      ref={controls}
-      makeDefault
-      dollyToCursor={false}
-      minDistance={5.5}
-      maxDistance={22}
-      smoothTime={0.45}
-      truckSpeed={0}
-      draggingSmoothTime={0.18}
-      mouseButtons={{
-        left: CameraControlsImpl.ACTION.NONE,
-        middle: CameraControlsImpl.ACTION.NONE,
-        right: CameraControlsImpl.ACTION.NONE,
-        wheel: CameraControlsImpl.ACTION.NONE,
-      }}
-      touches={{
-        one: CameraControlsImpl.ACTION.NONE,
-        two: CameraControlsImpl.ACTION.NONE,
-        three: CameraControlsImpl.ACTION.NONE,
-      }}
-    />
-  );
+  return null;
 }
 
 type RadiusStop = readonly [number, number];
