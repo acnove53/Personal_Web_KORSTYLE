@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PineScene, type PortfolioNode, type StageName } from "@/components/pine-scene";
 
 const stageCopy: Record<StageName, { chapter: string; title: string; note: string }> = {
@@ -29,6 +29,7 @@ const stageOrder: { stage: StageName; number: string; label: string }[] = [
 ];
 
 export function PinePortfolio() {
+  const introTitleRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<StageName>("trunk");
   const [selected, setSelected] = useState<PortfolioNode | null>(null);
   const [scrollToStage, setScrollToStage] = useState<((stage: StageName) => void) | null>(null);
@@ -60,6 +61,7 @@ export function PinePortfolio() {
           selectedNode={selected}
           onConnectScroll={connectScroll}
           onIntroComplete={() => setSceneReady(true)}
+          introTitleRef={introTitleRef}
         />
       </div>
 
@@ -154,8 +156,8 @@ export function PinePortfolio() {
         )}
       </AnimatePresence>
 
-      <div className="intro-fog" aria-hidden="true">
-        <div className="fog-label"><span>一</span> A STUDY IN SYSTEMS</div>
+      <div ref={introTitleRef} className="intro-title" aria-hidden="true">
+        <span>A Study in Systems</span>
       </div>
 
       <footer className="site-footer">

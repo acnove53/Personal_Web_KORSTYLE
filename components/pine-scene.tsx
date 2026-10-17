@@ -5,6 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { ThreeEvent } from "@react-three/fiber";
 import { Html, ScrollControls, useScroll } from "@react-three/drei";
+import { gsap } from "gsap";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 export type StageName = "branches" | "trunk" | "roots";
@@ -33,6 +34,8 @@ type IntroTimeline = {
   progress: number;
   fogDensity: number;
   complete: boolean;
+  phase: "title" | "seed" | "drop" | "sprout" | "complete";
+  seed: { x: number; y: number; z: number; scale: number; opacity: number; visible: boolean };
 };
 
 const portfolioNodes: PortfolioNode[] = [
@@ -130,12 +133,20 @@ type PineSceneProps = {
   selectedNode: PortfolioNode | null;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   onIntroComplete: () => void;
+  introTitleRef: { current: HTMLDivElement | null };
 };
 
-export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll, onIntroComplete }: PineSceneProps) {
+export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll, onIntroComplete, introTitleRef }: PineSceneProps) {
   const handleStage = useCallback(onStageChange, [onStageChange]);
   const handleScrollConnect = useCallback(onConnectScroll, [onConnectScroll]);
-  const intro = useMemo<IntroTimeline>(() => ({ elapsed: 0, progress: 0, fogDensity: 0.24, complete: false }), []);
+  const intro = useMemo<IntroTimeline>(() => ({
+    elapsed: 0,
+    progress: 0,
+    fogDensity: 0.24,
+    complete: false,
+    phase: "title",
+    seed: { x: 0.85, y: 1.4, z: 5, scale: 0, opacity: 0, visible: false },
+  }), []);
 
   return (
     <Canvas
@@ -149,7 +160,8 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
       <ambientLight intensity={1.5} />
       <directionalLight position={[-6, 9, 8]} intensity={1.4} color="#fffaf2" />
       <directionalLight position={[6, 3, -5]} intensity={0.45} color="#9d9a96" />
-      <IntroSequence intro={intro} />
+      <IntroSequence intro={intro} titleRef={introTitleRef} />
+      <SeedParticle intro={intro} />
       <EffectComposer multisampling={0} resolutionScale={0.75}>
         <Bloom
           intensity={0.7}
@@ -174,9 +186,63 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
   );
 }
 
-function IntroSequence({ intro }: { intro: IntroTimeline }) {
+function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { current: HTMLDivElement | null } }) {
   const { scene } = useThree();
   const fog = useMemo(() => new THREE.FogExp2("#f9f8f6", 0.24), []);
+
+  useEffect(() => {
+    const title = titleRef.current;
+    if (!title) return;
+
+    intro.elapsed = 0;
+    intro.progress = 0;
+    intro.complete = false;
+    intro.phase = "title";
+    Object.assign(intro.seed, { x: 0.85, y: 1.4, z: 5, scale: 0, opacity: 0, visible: false });
+    gsap.set(title, { opacity: 0, scale: 0.94, filter: "blur(12px)" });
+
+    const timeline = gsap.timeline();
+    timeline.to(title, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.85, ease: "sine.out" });
+    timeline.to({}, { duration: 0.32 });
+    timeline.to(title, {
+      opacity: 0,
+      scale: 0.035,
+      filter: "blur(8px)",
+      duration: 0.68,
+      ease: "power3.in",
+      onStart: () => { intro.phase = "seed"; },
+    });
+    timeline.to(intro.seed, {
+      scale: 0.14,
+      opacity: 1,
+      duration: 0.24,
+      ease: "back.out(2.2)",
+      onStart: () => { intro.seed.visible = true; },
+    }, "<+=0.38");
+    timeline.to(intro.seed, {
+      x: 1.51,
+      y: -2.8,
+      z: 0,
+      duration: 1.2,
+      ease: "bounce.out",
+      onStart: () => { intro.phase = "drop"; },
+    });
+    timeline.to(intro.seed, {
+      scale: 0,
+      opacity: 0,
+      duration: 0.12,
+      ease: "power2.in",
+      onComplete: () => {
+        intro.seed.visible = false;
+        intro.phase = "sprout";
+        intro.elapsed = 0;
+      },
+    });
+
+    return () => {
+      timeline.kill();
+    };
+  }, [intro, titleRef]);
 
   useEffect(() => {
     const previousFog = scene.fog;
@@ -187,17 +253,45 @@ function IntroSequence({ intro }: { intro: IntroTimeline }) {
   }, [fog, scene]);
 
   useFrame((_, delta) => {
-    intro.elapsed += Math.min(delta, 0.05);
-    const fogClear = smoothStep(0, 1.25, intro.elapsed);
-    fog.density = THREE.MathUtils.lerp(0.24, 0.008, fogClear);
-    intro.fogDensity = fog.density;
-
-    const drawProgress = smoothStep(0.82, 3.42, intro.elapsed);
-    intro.progress = drawProgress;
-    intro.complete = drawProgress >= 1;
+    if (intro.phase === "sprout" || intro.phase === "complete") {
+      if (intro.phase === "sprout") intro.elapsed += Math.min(delta, 0.05);
+      const fogClear = smoothStep(0, 1.05, intro.elapsed);
+      fog.density = THREE.MathUtils.lerp(0.24, 0.008, fogClear);
+      intro.fogDensity = fog.density;
+      intro.progress = smoothStep(0, 2.65, intro.elapsed);
+      intro.complete = intro.progress >= 1;
+      if (intro.complete) intro.phase = "complete";
+    } else {
+      fog.density = 0.24;
+      intro.fogDensity = fog.density;
+      intro.progress = 0;
+      intro.complete = false;
+    }
   });
 
   return null;
+}
+
+function SeedParticle({ intro }: { intro: IntroTimeline }) {
+  const seedRef = useRef<THREE.Mesh>(null);
+
+  useFrame(() => {
+    const seed = seedRef.current;
+    if (!seed) return;
+    const state = intro.seed;
+    seed.visible = state.visible;
+    if (!state.visible) return;
+    seed.position.set(state.x, state.y, state.z);
+    seed.scale.setScalar(state.scale);
+    (seed.material as THREE.MeshBasicMaterial).opacity = state.opacity;
+  });
+
+  return (
+    <mesh ref={seedRef} visible={false} renderOrder={10}>
+      <sphereGeometry args={[1, 24, 18]} />
+      <meshBasicMaterial color="#0b0b0a" transparent opacity={0} depthWrite={false} fog={false} />
+    </mesh>
+  );
 }
 
 function CameraController({
