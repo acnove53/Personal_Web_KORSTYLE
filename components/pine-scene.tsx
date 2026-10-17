@@ -829,7 +829,7 @@ function buildPineGeometry() {
   };
 }
 
-function createSumiToonMaterial(wash: number, noiseStrength: number) {
+function createSumiToonMaterial(wash: number, noiseStrength: number, windStrength: number) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uInkDeep: { value: new THREE.Color("#080807") },
@@ -838,6 +838,8 @@ function createSumiToonMaterial(wash: number, noiseStrength: number) {
       uPaper: { value: new THREE.Color("#f9f8f6") },
       uFogDensity: { value: 0.24 },
       uProgress: { value: 0 },
+      uTime: { value: 0 },
+      uWindStrength: { value: windStrength },
       uWash: { value: wash },
       uNoiseStrength: { value: noiseStrength },
     },
@@ -845,6 +847,8 @@ function createSumiToonMaterial(wash: number, noiseStrength: number) {
       attribute float aWash;
       attribute float aRoughness;
       uniform float uNoiseStrength;
+      uniform float uTime;
+      uniform float uWindStrength;
       varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vWorldPosition;
@@ -876,6 +880,14 @@ function createSumiToonMaterial(wash: number, noiseStrength: number) {
         float ridgeNoise = 1.0 - abs(noise3d(position * vec3(7.0, 2.3, 7.0) + vec3(4.2, 8.7, 1.6)) * 2.0 - 1.0);
         float displacement = ((broadNoise - 0.5) * 1.45 + (barkNoise - 0.5) * 0.55 + (ridgeNoise - 0.48) * 0.48) * aRoughness * uNoiseStrength;
         vec3 gnarledPosition = position + normalize(normal) * displacement;
+        float heightMask = smoothstep(2.35, 5.15, position.y);
+        float radialMask = smoothstep(0.9, 3.35, length(position.xz));
+        float windMask = heightMask * radialMask * uWindStrength;
+        float windPhase = uTime * 1.12 + position.x * 0.48 + position.z * 0.82;
+        float windX = sin(windPhase) + 0.32 * cos(uTime * 0.73 + position.z * 1.19);
+        float windZ = cos(uTime * 0.91 + position.z * 0.61 - position.x * 0.34);
+        gnarledPosition.x += windX * 0.034 * windMask;
+        gnarledPosition.z += windZ * 0.021 * windMask;
         vec4 viewPosition = modelViewMatrix * vec4(gnarledPosition, 1.0);
         vec4 worldPosition = modelMatrix * vec4(gnarledPosition, 1.0);
         vUv = uv;
@@ -987,8 +999,10 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
       uPaper: { value: new THREE.Color("#f9f8f6") },
       uFogDensity: { value: 0.24 },
       uProgress: { value: 0 },
+      uTime: { value: 0 },
     },
     vertexShader: `
+      uniform float uTime;
       varying vec2 vUv;
       varying vec3 vWorldPosition;
       varying float vViewDepth;
@@ -996,6 +1010,12 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
 
       void main() {
         vec4 localPosition = instanceMatrix * vec4(position, 1.0);
+        float heightMask = smoothstep(2.1, 4.7, localPosition.y);
+        float radialMask = smoothstep(0.75, 3.05, length(localPosition.xz));
+        float windMask = heightMask * radialMask;
+        float windPhase = uTime * 1.72 + localPosition.x * 0.72 + localPosition.z * 1.13;
+        localPosition.x += (sin(windPhase) + 0.28 * cos(uTime * 1.21 + localPosition.z)) * 0.062 * windMask;
+        localPosition.z += cos(uTime * 1.48 + localPosition.z * 0.74 - localPosition.x * 0.5) * 0.043 * windMask;
         vec4 worldPosition = modelMatrix * localPosition;
         vec4 viewPosition = viewMatrix * worldPosition;
         vUv = uv;
@@ -1080,8 +1100,8 @@ function PineTree({
   const brushTexture = useMemo(createBrushAlphaTexture, []);
   const brushPlane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const brushMaterial = useMemo(() => createBrushStrokeMaterial(brushTexture), [brushTexture]);
-  const structureMaterial = useMemo(() => createSumiToonMaterial(0.04, 0.55), []);
-  const foliageMaterial = useMemo(() => createSumiToonMaterial(0.16, 0.38), []);
+  const structureMaterial = useMemo(() => createSumiToonMaterial(0.04, 0.55, 0), []);
+  const foliageMaterial = useMemo(() => createSumiToonMaterial(0.16, 0.38, 1), []);
   const brushDummy = useMemo(() => new THREE.Object3D(), []);
   const brushRoll = useMemo(() => new THREE.Quaternion(), []);
   const brushAxis = useMemo(() => new THREE.Vector3(0, 0, 1), []);
@@ -1089,13 +1109,17 @@ function PineTree({
 
   useEffect(() => () => brushTexture.dispose(), [brushTexture]);
 
-  useFrame(({ camera }) => {
+  useFrame(({ camera, clock }) => {
+    const windTime = clock.elapsedTime;
     structureMaterial.uniforms.uProgress.value = intro.progress;
     structureMaterial.uniforms.uFogDensity.value = intro.fogDensity;
+    structureMaterial.uniforms.uTime.value = windTime;
     foliageMaterial.uniforms.uProgress.value = intro.progress;
     foliageMaterial.uniforms.uFogDensity.value = intro.fogDensity;
+    foliageMaterial.uniforms.uTime.value = windTime;
     brushMaterial.uniforms.uProgress.value = intro.progress;
     brushMaterial.uniforms.uFogDensity.value = intro.fogDensity;
+    brushMaterial.uniforms.uTime.value = windTime;
     if (branchNodes.current) branchNodes.current.visible = scroll.offset < 0.37;
     if (rootNodes.current) rootNodes.current.visible = scroll.offset > 0.63;
 
