@@ -32,6 +32,7 @@ export function PinePortfolio() {
   const [stage, setStage] = useState<StageName>("trunk");
   const [selected, setSelected] = useState<PortfolioNode | null>(null);
   const [scrollToStage, setScrollToStage] = useState<((stage: StageName) => void) | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
 
   const connectScroll = useCallback((scroll: (stage: StageName) => void) => {
     setScrollToStage(() => scroll);
@@ -50,7 +51,7 @@ export function PinePortfolio() {
   }, []);
 
   return (
-    <main id="top" className="portfolio-shell">
+    <main id="top" className={`portfolio-shell ${sceneReady ? "scene-ready" : ""}`}>
       <div className="scene-backdrop" aria-hidden="true" />
       <div className="canvas-wrap" aria-label="Interactive ink-wash pine tree portfolio scene">
         <PineScene
@@ -58,6 +59,7 @@ export function PinePortfolio() {
           onSelectNode={handleSelect}
           selectedNode={selected}
           onConnectScroll={connectScroll}
+          onIntroComplete={() => setSceneReady(true)}
         />
       </div>
 
@@ -99,7 +101,7 @@ export function PinePortfolio() {
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
-        {!selected && (
+        {sceneReady && !selected && (
           <motion.section
             key={stage}
             className={`chapter-intro chapter-${stage}`}

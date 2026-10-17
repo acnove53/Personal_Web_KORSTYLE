@@ -1,7 +1,7 @@
 "use client";
 
 import * as THREE from "three";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CameraControls, CameraControlsImpl, Html, ScrollControls, useScroll } from "@react-three/drei";
@@ -26,6 +26,13 @@ type BrushStroke = {
   width: number;
   height: number;
   rotation: number;
+};
+
+type IntroTimeline = {
+  elapsed: number;
+  progress: number;
+  fogDensity: number;
+  complete: boolean;
 };
 
 const portfolioNodes: PortfolioNode[] = [
@@ -122,11 +129,13 @@ type PineSceneProps = {
   onSelectNode: (node: PortfolioNode | null) => void;
   selectedNode: PortfolioNode | null;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
+  onIntroComplete: () => void;
 };
 
-export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll }: PineSceneProps) {
+export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll, onIntroComplete }: PineSceneProps) {
   const handleStage = useCallback(onStageChange, [onStageChange]);
   const handleScrollConnect = useCallback(onConnectScroll, [onConnectScroll]);
+  const intro = useMemo<IntroTimeline>(() => ({ elapsed: 0, progress: 0, fogDensity: 0.24, complete: false }), []);
 
   return (
     <Canvas
@@ -137,10 +146,10 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
       fallback={<div className="canvas-fallback">This portfolio needs WebGL to reveal the full scene.</div>}
     >
       <color attach="background" args={["#f9f8f6"]} />
-      <fog attach="fog" args={["#f9f8f6", 14.2, 20]} />
       <ambientLight intensity={1.5} />
       <directionalLight position={[-6, 9, 8]} intensity={1.4} color="#fffaf2" />
       <directionalLight position={[6, 3, -5]} intensity={0.45} color="#9d9a96" />
+      <IntroSequence intro={intro} />
       <EffectComposer multisampling={0} resolutionScale={0.75}>
         <Bloom
           intensity={0.7}
@@ -152,23 +161,55 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
       </EffectComposer>
       <ScrollControls pages={3} damping={0.16} maxSpeed={0.9} distance={1}>
         <ScrollCamera
+          intro={intro}
+          onIntroComplete={onIntroComplete}
           onStageChange={handleStage}
           selectedNode={selectedNode}
           onSelectNode={onSelectNode}
           onConnectScroll={handleScrollConnect}
         />
-        <PineTree selectedNode={selectedNode} onSelectNode={onSelectNode} />
+        <PineTree intro={intro} selectedNode={selectedNode} onSelectNode={onSelectNode} />
       </ScrollControls>
     </Canvas>
   );
 }
 
+function IntroSequence({ intro }: { intro: IntroTimeline }) {
+  const { scene } = useThree();
+  const fog = useMemo(() => new THREE.FogExp2("#f9f8f6", 0.24), []);
+
+  useEffect(() => {
+    const previousFog = scene.fog;
+    scene.fog = fog;
+    return () => {
+      if (scene.fog === fog) scene.fog = previousFog;
+    };
+  }, [fog, scene]);
+
+  useFrame((_, delta) => {
+    intro.elapsed += Math.min(delta, 0.05);
+    const fogClear = smoothStep(0, 1.25, intro.elapsed);
+    fog.density = THREE.MathUtils.lerp(0.24, 0.008, fogClear);
+    intro.fogDensity = fog.density;
+
+    const drawProgress = smoothStep(0.82, 3.42, intro.elapsed);
+    intro.progress = drawProgress;
+    intro.complete = drawProgress >= 1;
+  });
+
+  return null;
+}
+
 function ScrollCamera({
+  intro,
+  onIntroComplete,
   onStageChange,
   selectedNode,
   onSelectNode,
   onConnectScroll,
 }: {
+  intro: IntroTimeline;
+  onIntroComplete: () => void;
   onStageChange: (stage: StageName) => void;
   selectedNode: PortfolioNode | null;
   onSelectNode: (node: PortfolioNode | null) => void;
@@ -178,7 +219,9 @@ function ScrollCamera({
   const controls = useRef<CameraControlsImpl>(null);
   const lastStage = useRef<StageName>("trunk");
   const lastCameraCommand = useRef<string>("");
+  const introCompleteNotified = useRef(false);
   const zoom = useRef(0);
+  const introZoom = useRef(0);
   const focusNode = useRef<PortfolioNode | null>(null);
   const dismissedNode = useRef<string | null>(null);
   const normalCamera = useMemo(() => new THREE.Vector3(), []);
@@ -187,6 +230,10 @@ function ScrollCamera({
   const focusedTarget = useMemo(() => new THREE.Vector3(), []);
   const cameraPosition = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
+  const cameraBase = useMemo(() => new THREE.Vector3(), []);
+  const targetBase = useMemo(() => new THREE.Vector3(), []);
+  const trunkCamera = useMemo(() => new THREE.Vector3(1.12, 2.18, 8.9), []);
+  const trunkLookAt = useMemo(() => new THREE.Vector3(1.35, 1.62, 0), []);
 
   useEffect(() => {
     const element = scroll.el;
@@ -206,7 +253,7 @@ function ScrollCamera({
   useFrame((_, delta) => {
     const offset = scroll.offset;
     const stage: StageName = offset < 0.37 ? "branches" : offset > 0.63 ? "roots" : "trunk";
-    if (stage !== lastStage.current) {
+    if (intro.complete && stage !== lastStage.current) {
       lastStage.current = stage;
       onStageChange(stage);
     }
@@ -227,6 +274,18 @@ function ScrollCamera({
     cameraPosition.copy(normalCamera);
     lookTarget.copy(normalTarget);
 
+    const centered = Math.abs(offset - 0.5) < 0.16;
+    const introZoomTarget = intro.complete && centered ? 1 : 0;
+    introZoom.current = THREE.MathUtils.damp(introZoom.current, introZoomTarget, 1.8, delta);
+    if (!introCompleteNotified.current && introZoomTarget === 1 && introZoom.current > 0.985) {
+      introCompleteNotified.current = true;
+      onIntroComplete();
+    }
+    cameraPosition.lerpVectors(normalCamera, trunkCamera, introZoom.current);
+    lookTarget.lerpVectors(normalTarget, trunkLookAt, introZoom.current);
+    cameraBase.copy(cameraPosition);
+    targetBase.copy(lookTarget);
+
     if (focusNode.current) {
       const focus = focusNode.current;
       const nodeX = 1.45 + focus.position[0];
@@ -234,12 +293,12 @@ function ScrollCamera({
       const nodeZ = focus.position[2];
       focusedCamera.set(nodeX + 1.15, nodeY + 0.28, 14.2 - 7.0 * zoom.current);
       focusedTarget.set(nodeX + 1.55, nodeY, nodeZ);
-      cameraPosition.lerpVectors(normalCamera, focusedCamera, zoom.current);
-      lookTarget.lerpVectors(normalTarget, focusedTarget, zoom.current);
+      cameraPosition.lerpVectors(cameraBase, focusedCamera, zoom.current);
+      lookTarget.lerpVectors(targetBase, focusedTarget, zoom.current);
       if (!selectedNode && zoom.current < 0.012) focusNode.current = null;
     }
 
-    const commandKey = `${Math.round(offset * 10000)}-${zoom.current.toFixed(3)}-${selectedNode?.id ?? ""}`;
+    const commandKey = `${Math.round(offset * 10000)}-${introZoom.current.toFixed(3)}-${zoom.current.toFixed(3)}-${selectedNode?.id ?? ""}`;
     if (controls.current && commandKey !== lastCameraCommand.current) {
       controls.current.setLookAt(
         cameraPosition.x,
@@ -286,6 +345,7 @@ const trunkRadius: RadiusStop[] = [
 ];
 const branchRadius: RadiusStop[] = [[0, 1.15], [0.18, 1], [0.48, 0.72], [0.76, 0.4], [0.94, 0.16], [1, 0.035]];
 const twigRadius: RadiusStop[] = [[0, 1.05], [0.24, 0.86], [0.62, 0.55], [0.9, 0.22], [1, 0.04]];
+const rootRadius: RadiusStop[] = [[0, 2.25], [0.13, 1.8], [0.4, 1.22], [0.72, 0.58], [0.94, 0.18], [1, 0.025]];
 
 const trunkAnchors = [
   new THREE.Vector3(0.06, 0, 0.02),
@@ -353,6 +413,9 @@ function makeOrganicTube(
   for (let i = 0; i <= tubularSegments; i++) {
     const t = i / tubularSegments;
     const center = curve.getPointAt(t);
+    const pathWobble = Math.sin(t * 19 + seed * 1.7) * Math.sin(t * 7.4 + seed * 0.61);
+    center.x += pathWobble * baseRadius * 0.15;
+    center.z += Math.cos(t * 16 + seed * 0.9) * Math.sin(t * 5.2 + seed) * baseRadius * 0.13;
     const radius = baseRadius * sampleRadius(t, stops);
     const normal = frames.normals[i];
     const binormal = frames.binormals[i];
@@ -362,10 +425,10 @@ function makeOrganicTube(
       const angle = u * Math.PI * 2;
       const roughBark = Math.sin(angle * 5 + t * 18 + seed * 0.6) * Math.sin(t * 13 + seed);
       const irregularity = 1
-        + 0.062 * Math.sin(angle * 3 + seed) * Math.sin(t * 9 + seed * 0.7)
-        + 0.032 * Math.sin(angle * 7 + t * 28 + seed * 1.4)
-        + 0.025 * Math.sin(angle * 2 + t * 17 + seed * 0.42)
-        + roughBark * 0.032;
+        + 0.09 * Math.sin(angle * 3 + seed) * Math.sin(t * 9 + seed * 0.7)
+        + 0.052 * Math.sin(angle * 7 + t * 28 + seed * 1.4)
+        + 0.038 * Math.sin(angle * 2 + t * 17 + seed * 0.42)
+        + roughBark * 0.055;
       const radialX = Math.cos(angle) * radius * irregularity;
       const radialY = Math.sin(angle) * radius * irregularity;
       positions.push(
@@ -461,6 +524,20 @@ function seedUnit(seed: number, index: number) {
   return value - Math.floor(value);
 }
 
+function weatheredCurve(points: THREE.Vector3[], seed: number, amplitude: number) {
+  const last = points.length - 1;
+  const weathered = points.map((point, index) => {
+    if (index === 0 || index === last) return point.clone();
+    const amount = amplitude * (0.55 + seedUnit(seed, index * 7 + 2) * 0.9);
+    return point.clone().add(new THREE.Vector3(
+      (seedUnit(seed, index * 11 + 1) * 2 - 1) * amount,
+      (seedUnit(seed, index * 13 + 3) * 2 - 1) * amount * 0.72,
+      (seedUnit(seed, index * 17 + 5) * 2 - 1) * amount,
+    ));
+  });
+  return curveThrough(weathered);
+}
+
 function smoothStep(edge0: number, edge1: number, value: number) {
   const x = THREE.MathUtils.clamp((value - edge0) / (edge1 - edge0), 0, 1);
   return x * x * (3 - 2 * x);
@@ -503,23 +580,34 @@ function createBrushAlphaTexture() {
 }
 
 function addBrushCluster(target: BrushStroke[], center: THREE.Vector3, span: number, seed: number, density: number) {
+  const lobes = [
+    new THREE.Vector3(-0.31, 0.02, 0.08),
+    new THREE.Vector3(0.2, 0.12, -0.13),
+    new THREE.Vector3(0.03, -0.08, 0.25),
+    new THREE.Vector3(0.38, -0.04, 0.15),
+    new THREE.Vector3(-0.12, 0.16, -0.22),
+  ];
   for (let i = 0; i < density; i++) {
-    const angle = (i / density) * Math.PI * 2 + seed * 0.29 + (seedUnit(seed, i + 6) - 0.5) * 0.3;
-    const ring = Math.sqrt(seedUnit(seed, i * 5 + 2));
-    const heightNoise = seedUnit(seed, i * 7 + 4);
-    const depthNoise = seedUnit(seed, i * 9 + 1);
-    const height = span * (0.52 + heightNoise * 0.56);
-    const width = height * (0.075 + seedUnit(seed, i * 11 + 3) * 0.095);
-    const position = center.clone().add(new THREE.Vector3(
-      Math.cos(angle) * span * ring * 0.34,
-      Math.sin(angle) * span * ring * 0.2 + height * 0.12,
-      (depthNoise - 0.5) * span * 0.65,
-    ));
+    const lobeIndex = Math.floor(seedUnit(seed, i * 3 + 6) * lobes.length);
+    const lobe = lobes[lobeIndex];
+    const angle = seedUnit(seed, i * 5 + 2) * Math.PI * 2 + seed * 0.29;
+    const ring = (seedUnit(seed, i * 7 + 4) + seedUnit(seed, i * 9 + 1) + seedUnit(seed, i * 11 + 3)) / 3;
+    const heightNoise = seedUnit(seed, i * 13 + 8);
+    const height = span * (0.48 + heightNoise * 0.76);
+    const width = height * (0.085 + seedUnit(seed, i * 17 + 5) * 0.15);
+    const spread = span * (0.19 + ring * 0.36);
+    const position = center.clone()
+      .addScaledVector(lobe, span * (0.45 + seedUnit(seed, i * 19 + 2) * 0.45))
+      .add(new THREE.Vector3(
+        Math.cos(angle) * spread * 0.52,
+        Math.sin(angle) * spread * 0.19 + height * (0.06 + heightNoise * 0.16),
+        Math.sin(angle) * spread * 0.46 + (seedUnit(seed, i * 23 + 4) - 0.5) * span * 0.34,
+      ));
     target.push({
       position,
       width,
       height,
-      rotation: angle + Math.PI * 0.5 + (heightNoise - 0.5) * 0.46,
+      rotation: angle + Math.PI * 0.5 + (seedUnit(seed, i * 29 + 7) - 0.5) * 0.95,
     });
   }
 }
@@ -553,7 +641,7 @@ function makeBarkRidges() {
       const frontFacingAngle = Math.atan2(binormal.z, normal.z);
       const angle = frontFacingAngle + stroke.angle + Math.sin(along * 8 + stroke.seed) * 0.12;
       const radial = normal.clone().multiplyScalar(Math.cos(angle)).addScaledVector(binormal, Math.sin(angle)).normalize();
-      const surfaceRadius = 0.6 * sampleRadius(t, trunkRadius);
+      const surfaceRadius = 0.72 * sampleRadius(t, trunkRadius);
       points.push(trunkSpline.getPointAt(t).addScaledVector(radial, surfaceRadius * 1.075 + 0.012));
     }
     const curve = curveThrough(points);
@@ -574,40 +662,43 @@ function buildPineGeometry() {
   const structureParts: THREE.BufferGeometry[] = [];
   const canopyParts: THREE.BufferGeometry[] = [];
   const foliageStrokes: BrushStroke[] = [];
-  structureParts.push(makeOrganicTube(trunkSpline, 0.6, trunkRadius, 26, 176, 0.8, 0.12));
+  structureParts.push(makeOrganicTube(trunkSpline, 0.72, trunkRadius, 26, 176, 0.8, 0.12));
   structureParts.push(...makeBarkRidges());
 
-  // Surface roots follow a few long, exposed strokes instead of a radial wheel.
+  // Nebari roots flare from the trunk and travel visibly across the ground plane.
   const rootArms = [
-    { side: -1, reach: 3.85, lift: -0.38, seed: 1 },
-    { side: -1, reach: 2.42, lift: -0.08, seed: 2 },
-    { side: -1, reach: 1.48, lift: -0.28, seed: 3 },
-    { side: 1, reach: 1.35, lift: -0.12, seed: 4 },
-    { side: 1, reach: 2.48, lift: -0.4, seed: 5 },
-    { side: 1, reach: 3.02, lift: -0.22, seed: 6 },
+    { angle: -3.1, reach: 3.8, lift: -0.31, seed: 1 },
+    { angle: -2.4, reach: 2.65, lift: -0.19, seed: 2 },
+    { angle: -1.25, reach: 3.25, lift: -0.36, seed: 3 },
+    { angle: -0.15, reach: 2.52, lift: -0.2, seed: 4 },
+    { angle: 0.35, reach: 3.55, lift: -0.3, seed: 5 },
+    { angle: 0.95, reach: 2.28, lift: -0.16, seed: 6 },
+    { angle: 1.75, reach: 3.12, lift: -0.34, seed: 7 },
+    { angle: 2.75, reach: 2.72, lift: -0.23, seed: 8 },
   ];
   for (const root of rootArms) {
-    const direction = new THREE.Vector3(root.side, 0, root.seed % 2 ? 0.1 : -0.08).normalize();
+    const direction = new THREE.Vector3(Math.cos(root.angle), 0, Math.sin(root.angle)).normalize();
     const start = trunkCenterAt(0.16);
-    const rootCurve = curveThrough([
+    const rootCurve = weatheredCurve([
       start.clone(),
-      start.clone().addScaledVector(direction, root.reach * 0.22).add(new THREE.Vector3(0, 0.04, 0)),
-      start.clone().addScaledVector(direction, root.reach * 0.5).add(new THREE.Vector3(0.03 * root.side, root.lift * 0.35, 0.03)),
-      start.clone().addScaledVector(direction, root.reach * 0.78).add(new THREE.Vector3(-0.05 * root.side, root.lift * 0.72, 0)),
-      start.clone().addScaledVector(direction, root.reach).add(new THREE.Vector3(0.08 * root.side, root.lift, 0.02)),
-    ]);
-    structureParts.push(makeOrganicTube(rootCurve, 0.24, branchRadius, 14, 56, root.seed, 0.2));
+      start.clone().addScaledVector(direction, root.reach * 0.18).add(new THREE.Vector3(0, 0.1, 0)),
+      start.clone().addScaledVector(direction, root.reach * 0.46).add(new THREE.Vector3(-direction.z * 0.12, 0.025, direction.x * 0.12)),
+      start.clone().addScaledVector(direction, root.reach * 0.74).add(new THREE.Vector3(direction.z * 0.13, root.lift * 0.42, -direction.x * 0.13)),
+      start.clone().addScaledVector(direction, root.reach).add(new THREE.Vector3(0, root.lift, 0)),
+    ], root.seed * 3.7, 0.13);
+    structureParts.push(makeOrganicTube(rootCurve, 0.29, rootRadius, 16, 68, root.seed, 0.25));
 
-    for (const t of [0.5, 0.76]) {
+    for (const t of [0.42, 0.68, 0.86]) {
       const joint = rootCurve.getPointAt(t);
-      const forkSide = t > 0.6 ? -root.side : root.side;
-      const fork = curveThrough([
+      const forkSide = t > 0.6 ? -1 : 1;
+      const forkDirection = new THREE.Vector3(-direction.z * forkSide, 0, direction.x * forkSide);
+      const fork = weatheredCurve([
         joint,
-        joint.clone().add(new THREE.Vector3(forkSide * 0.2, -0.08, 0.07)),
-        joint.clone().add(new THREE.Vector3(forkSide * 0.48, -0.16, 0.12)),
-        joint.clone().add(new THREE.Vector3(forkSide * 0.7, -0.22, 0.14)),
-      ]);
-      structureParts.push(makeOrganicTube(fork, 0.068, twigRadius, 8, 22, root.seed + t, 0.34));
+        joint.clone().addScaledVector(forkDirection, 0.2).add(new THREE.Vector3(0, -0.035, 0)),
+        joint.clone().addScaledVector(forkDirection, 0.46).add(new THREE.Vector3(0, -0.1, 0)),
+        joint.clone().addScaledVector(forkDirection, 0.66).add(new THREE.Vector3(0, -0.17, 0)),
+      ], root.seed + t * 9, 0.075);
+      structureParts.push(makeOrganicTube(fork, 0.075, twigRadius, 9, 26, root.seed + t, 0.34));
     }
   }
 
@@ -617,13 +708,13 @@ function buildPineGeometry() {
     const trunkPoint = trunkCenterAt(limb.y);
     const depth = (seedUnit(limb.seed, 1) - 0.5) * 2.4;
     const sway = (seedUnit(limb.seed, 2) - 0.5) * 0.36;
-    const primaryCurve = curveThrough([
+    const primaryCurve = weatheredCurve([
       trunkPoint,
       trunkPoint.clone().addScaledVector(direction, limb.reach * 0.2).add(new THREE.Vector3(sway, 0.38 + limb.lift * 0.2, depth * 0.38)),
       trunkPoint.clone().addScaledVector(direction, limb.reach * 0.48).add(new THREE.Vector3(-sway * 0.4, limb.lift + limb.bow, depth * 0.82)),
       trunkPoint.clone().addScaledVector(direction, limb.reach * 0.76).add(new THREE.Vector3(sway * 0.7, limb.lift + limb.bow * 0.55, depth)),
       trunkPoint.clone().addScaledVector(direction, limb.reach).add(new THREE.Vector3(-sway, limb.lift, depth * 0.7)),
-    ]);
+    ], limb.seed * 4.1, 0.16);
     const tier = Math.max(0, (8.1 - limb.y) * 0.012);
     canopyParts.push(makeOrganicTube(primaryCurve, 0.16 - tier, branchRadius, 12, 56, limb.seed, 0.22 + tier));
 
@@ -632,22 +723,22 @@ function buildPineGeometry() {
       const base = primaryCurve.getPointAt(t);
       const twigSide = twigIndex % 2 === 0 ? -limb.side : limb.side;
       const twigReach = limb.reach * (0.15 - t * 0.035);
-      const twigCurve = curveThrough([
+      const twigCurve = weatheredCurve([
         base,
         base.clone().add(new THREE.Vector3(limb.side * twigReach * 0.24, 0.2, twigSide * 0.1)),
         base.clone().add(new THREE.Vector3(limb.side * twigReach * 0.63, 0.38 + limb.lift * 0.16, depth * 0.45 + twigSide * 0.16)),
         base.clone().add(new THREE.Vector3(limb.side * twigReach, 0.32 + limb.lift * 0.2, depth * 0.62 + twigSide * 0.2)),
-      ]);
+      ], limb.seed * 7 + twigIndex, 0.085);
       canopyParts.push(makeOrganicTube(twigCurve, 0.046, twigRadius, 8, 24, limb.seed + twigIndex, 0.34));
       addBrushCluster(foliageStrokes, twigCurve.getPointAt(1), 0.42 + (twigIndex % 2) * 0.08, limb.seed * 7 + twigIndex, 22);
 
       const forkBase = twigCurve.getPointAt(0.58);
-      const forkCurve = curveThrough([
+      const forkCurve = weatheredCurve([
         forkBase,
         forkBase.clone().add(new THREE.Vector3(limb.side * 0.08, 0.16, twigSide * 0.03)),
         forkBase.clone().add(new THREE.Vector3(limb.side * 0.22, 0.29, twigSide * 0.11)),
         forkBase.clone().add(new THREE.Vector3(limb.side * 0.31, 0.34, twigSide * 0.16)),
-      ]);
+      ], limb.seed * 13 + twigIndex, 0.07);
       canopyParts.push(makeOrganicTube(forkCurve, 0.024, twigRadius, 7, 16, limb.seed + twigIndex * 2, 0.4));
       if (twigIndex % 2 === 0) addBrushCluster(foliageStrokes, forkCurve.getPointAt(1), 0.29, limb.seed * 11 + twigIndex, 14);
     }
@@ -665,15 +756,15 @@ function buildPineGeometry() {
   };
 }
 
-function createSumiToonMaterial(fogNear: number, fogFar: number, wash: number, noiseStrength: number) {
+function createSumiToonMaterial(wash: number, noiseStrength: number) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uInkDeep: { value: new THREE.Color("#080807") },
-      uInkMid: { value: new THREE.Color("#1a1917") },
-      uInkLight: { value: new THREE.Color("#373630") },
+      uInkMid: { value: new THREE.Color("#11110f") },
+      uInkLight: { value: new THREE.Color("#1a1a1a") },
       uPaper: { value: new THREE.Color("#f9f8f6") },
-      uFogNear: { value: fogNear },
-      uFogFar: { value: fogFar },
+      uFogDensity: { value: 0.24 },
+      uProgress: { value: 0 },
       uWash: { value: wash },
       uNoiseStrength: { value: noiseStrength },
     },
@@ -687,6 +778,7 @@ function createSumiToonMaterial(fogNear: number, fogFar: number, wash: number, n
       varying vec3 vViewPosition;
       varying float vViewDepth;
       varying float vWash;
+      varying float vLocalY;
 
       float hash31(vec3 p) {
         p = fract(p * 0.1031);
@@ -719,6 +811,7 @@ function createSumiToonMaterial(fogNear: number, fogFar: number, wash: number, n
         vViewPosition = -viewPosition.xyz;
         vViewDepth = -viewPosition.z;
         vWash = aWash;
+        vLocalY = position.y;
         gl_Position = projectionMatrix * viewPosition;
       }
     `,
@@ -727,8 +820,8 @@ function createSumiToonMaterial(fogNear: number, fogFar: number, wash: number, n
       uniform vec3 uInkMid;
       uniform vec3 uInkLight;
       uniform vec3 uPaper;
-      uniform float uFogNear;
-      uniform float uFogFar;
+      uniform float uFogDensity;
+      uniform float uProgress;
       uniform float uWash;
 
       varying vec2 vUv;
@@ -737,6 +830,7 @@ function createSumiToonMaterial(fogNear: number, fogFar: number, wash: number, n
       varying vec3 vViewPosition;
       varying float vViewDepth;
       varying float vWash;
+      varying float vLocalY;
 
       float hash31(vec3 p) {
         p = fract(p * 0.1031);
@@ -770,35 +864,44 @@ function createSumiToonMaterial(fogNear: number, fogFar: number, wash: number, n
         vec3 normal = normalize(vNormal);
         if (!gl_FrontFacing) normal = -normal;
         float lightBand = max(dot(normal, normalize(vec3(-0.38, 0.78, 0.52))), 0.0);
-        vec3 ink = mix(uInkDeep, uInkMid, smoothstep(0.13, 0.34, lightBand));
-        ink = mix(ink, uInkLight, smoothstep(0.62, 0.8, lightBand) * 0.48);
+        vec3 ink = mix(uInkDeep, uInkMid, smoothstep(0.08, 0.42, lightBand));
+        ink = mix(ink, uInkLight, smoothstep(0.68, 0.9, lightBand) * 0.22);
 
         float fiber = fbm(vec3(vUv.x * 12.0 + vWash * 3.0, vUv.y * 5.0, vWorldPosition.z * 2.8));
         float fineGrain = noise3d(vWorldPosition * 32.0);
         float brushStriation = 1.0 - smoothstep(0.025, 0.15, abs(fract(vUv.x * 29.0 + (fiber - 0.5) * 0.24) - 0.5));
         float brokenPigment = smoothstep(0.24, 0.74, fiber);
-        ink = mix(ink, uInkDeep, brushStriation * brokenPigment * 0.24);
-        ink = mix(ink, uInkLight, smoothstep(0.73, 0.94, fiber) * 0.13);
+        ink = mix(ink, uInkDeep, brushStriation * brokenPigment * 0.2);
+        ink = mix(ink, uInkLight, smoothstep(0.73, 0.94, fiber) * 0.06);
         float dryBrush = fbm(vec3(vUv.x * 37.0, vUv.y * 11.0, vWorldPosition.y * 1.7));
         float paperBreakup = smoothstep(0.73, 0.94, dryBrush);
-        ink = mix(ink, uPaper, paperBreakup * 0.095);
+        ink = mix(ink, uPaper, paperBreakup * 0.045);
         ink = mix(ink, uInkDeep, smoothstep(0.57, 0.82, fbm(vWorldPosition * 4.2)) * 0.16);
         float edge = 1.0 - abs(dot(normal, normalize(vViewPosition)));
         float edgeGrain = fbm(vWorldPosition * 19.0 + vec3(vUv.y * 2.0));
         float inkBleed = smoothstep(0.7, 1.02, edge + (edgeGrain - 0.5) * 0.34);
-        ink = mix(ink, uPaper, inkBleed * 0.62);
+        ink = mix(ink, uPaper, inkBleed * 0.2);
         ink *= 0.91 + fineGrain * 0.16;
-        ink = mix(ink, uInkMid, clamp((vWash + uWash) * 0.055, 0.0, 0.12));
+        ink = mix(ink, uInkMid, clamp((vWash + uWash) * 0.03, 0.0, 0.06));
 
-        float fogNoise = fbm(vWorldPosition * 0.48);
-        float fogDepth = vViewDepth + (fogNoise - 0.5) * 1.35;
-        float fogFactor = smoothstep(uFogNear, uFogFar, fogDepth);
-        vec3 color = mix(ink, uPaper, fogFactor);
-        gl_FragColor = vec4(color, 1.0);
+        float drawNoise = fbm(vWorldPosition * vec3(7.6, 2.1, 7.6) + normal * 3.4);
+        float drawFront = mix(-0.78, 9.42, uProgress) + (drawNoise - 0.5) * 0.48;
+        float inkDistance = drawFront - vLocalY;
+        if (inkDistance < -0.025) discard;
+        float reveal = smoothstep(-0.02, 0.17, inkDistance);
+        float wetEdge = 1.0 - smoothstep(0.015, 0.24, max(inkDistance, 0.0));
+        ink = mix(ink, uInkMid, wetEdge * 0.28);
+        float dryBreak = smoothstep(0.79, 0.98, fbm(vWorldPosition * 28.0 + vec3(vUv.y * 4.0)));
+        reveal *= 1.0 - dryBreak * 0.065;
+        float fogVisibility = exp(-uFogDensity * uFogDensity * max(vViewDepth, 0.0) * max(vViewDepth, 0.0));
+        if (fogVisibility < 0.008) discard;
+        gl_FragColor = vec4(ink, reveal * fogVisibility);
         #include <colorspace_fragment>
       }
     `,
     side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: true,
     toneMapped: false,
   });
 }
@@ -807,15 +910,16 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uBrush: { value: brushTexture },
-      uInk: { value: new THREE.Color("#11110f") },
+      uInk: { value: new THREE.Color("#0c0c0b") },
       uPaper: { value: new THREE.Color("#f9f8f6") },
-      uFogNear: { value: 13.4 },
-      uFogFar: { value: 17.8 },
+      uFogDensity: { value: 0.24 },
+      uProgress: { value: 0 },
     },
     vertexShader: `
       varying vec2 vUv;
       varying vec3 vWorldPosition;
       varying float vViewDepth;
+      varying float vLocalY;
 
       void main() {
         vec4 localPosition = instanceMatrix * vec4(position, 1.0);
@@ -824,6 +928,7 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
         vUv = uv;
         vWorldPosition = worldPosition.xyz;
         vViewDepth = -viewPosition.z;
+        vLocalY = localPosition.y;
         gl_Position = projectionMatrix * viewPosition;
       }
     `,
@@ -831,11 +936,12 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
       uniform sampler2D uBrush;
       uniform vec3 uInk;
       uniform vec3 uPaper;
-      uniform float uFogNear;
-      uniform float uFogFar;
+      uniform float uFogDensity;
+      uniform float uProgress;
       varying vec2 vUv;
       varying vec3 vWorldPosition;
       varying float vViewDepth;
+      varying float vLocalY;
 
       float hash31(vec3 p) {
         p = fract(p * 0.1031);
@@ -858,11 +964,17 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
         float paperGrain = noise3d(vec3(vUv * 39.0, vWorldPosition.z * 12.0));
         float alpha = texture2D(uBrush, vUv).a;
         alpha *= mix(0.62, 1.0, paperGrain);
-        float depthFog = smoothstep(uFogNear, uFogFar, vViewDepth);
-        alpha *= 1.0 - depthFog;
+        float drawNoise = noise3d(vWorldPosition * vec3(7.0, 2.0, 7.0));
+        float drawFront = mix(-0.78, 9.42, uProgress) + (drawNoise - 0.5) * 0.48;
+        float inkDistance = drawFront - vLocalY;
+        if (inkDistance < -0.025) discard;
+        alpha *= smoothstep(-0.02, 0.17, inkDistance);
+        float fogVisibility = exp(-uFogDensity * uFogDensity * max(vViewDepth, 0.0) * max(vViewDepth, 0.0));
+        if (fogVisibility < 0.008) discard;
+        alpha *= fogVisibility;
         if (alpha < 0.025) discard;
         float pigment = noise3d(vWorldPosition * 8.0 + vec3(vUv.y * 2.0));
-        vec3 ink = mix(uInk, vec3(0.19, 0.18, 0.16), smoothstep(0.76, 0.98, pigment) * 0.26);
+        vec3 ink = mix(uInk, vec3(0.1, 0.1, 0.09), smoothstep(0.76, 0.98, pigment) * 0.12);
         float edgeBleed = smoothstep(0.72, 0.98, 1.0 - alpha) * 0.18;
         vec3 color = mix(ink, uPaper, edgeBleed);
         gl_FragColor = vec4(color, alpha);
@@ -877,25 +989,26 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
 }
 
 function PineTree({
+  intro,
   selectedNode,
   onSelectNode,
 }: {
+  intro: IntroTimeline;
   selectedNode: PortfolioNode | null;
   onSelectNode: (node: PortfolioNode | null) => void;
 }) {
-  const tree = useRef<THREE.Group>(null);
   const branchNodes = useRef<THREE.Group>(null);
   const rootNodes = useRef<THREE.Group>(null);
   const brushMesh = useRef<THREE.InstancedMesh>(null);
-  const growth = useRef(0.02);
+  const matricesReady = useRef(false);
   const nodes = portfolioNodes;
   const scroll = useScroll();
   const geometry = useMemo(buildPineGeometry, []);
   const brushTexture = useMemo(createBrushAlphaTexture, []);
   const brushPlane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const brushMaterial = useMemo(() => createBrushStrokeMaterial(brushTexture), [brushTexture]);
-  const structureMaterial = useMemo(() => createSumiToonMaterial(14.8, 20.2, 0.04, 0.42), []);
-  const foliageMaterial = useMemo(() => createSumiToonMaterial(13.4, 17.8, 0.16, 0.32), []);
+  const structureMaterial = useMemo(() => createSumiToonMaterial(0.04, 0.55), []);
+  const foliageMaterial = useMemo(() => createSumiToonMaterial(0.16, 0.38), []);
   const brushDummy = useMemo(() => new THREE.Object3D(), []);
   const brushRoll = useMemo(() => new THREE.Quaternion(), []);
   const brushAxis = useMemo(() => new THREE.Vector3(0, 0, 1), []);
@@ -903,13 +1016,17 @@ function PineTree({
 
   useEffect(() => () => brushTexture.dispose(), [brushTexture]);
 
-  useFrame(({ camera }, delta) => {
-    growth.current = THREE.MathUtils.damp(growth.current, 1, 0.9, delta);
-    if (tree.current) tree.current.scale.y = growth.current;
+  useFrame(({ camera }) => {
+    structureMaterial.uniforms.uProgress.value = intro.progress;
+    structureMaterial.uniforms.uFogDensity.value = intro.fogDensity;
+    foliageMaterial.uniforms.uProgress.value = intro.progress;
+    foliageMaterial.uniforms.uFogDensity.value = intro.fogDensity;
+    brushMaterial.uniforms.uProgress.value = intro.progress;
+    brushMaterial.uniforms.uFogDensity.value = intro.fogDensity;
     if (branchNodes.current) branchNodes.current.visible = scroll.offset < 0.37;
     if (rootNodes.current) rootNodes.current.visible = scroll.offset > 0.63;
 
-    if (brushMesh.current && camera.quaternion.angleTo(previousCameraRotation) > 0.0005) {
+    if (brushMesh.current && (!matricesReady.current || camera.quaternion.angleTo(previousCameraRotation) > 0.0005)) {
       geometry.foliage.forEach((stroke, index) => {
         brushDummy.position.copy(stroke.position);
         brushRoll.setFromAxisAngle(brushAxis, stroke.rotation);
@@ -920,11 +1037,12 @@ function PineTree({
       });
       brushMesh.current.instanceMatrix.needsUpdate = true;
       previousCameraRotation.copy(camera.quaternion);
+      matricesReady.current = true;
     }
   });
 
   return (
-    <group ref={tree} position={[1.45, -2.8, 0]}>
+    <group position={[1.45, -2.8, 0]}>
       <mesh geometry={geometry.structure} material={structureMaterial} />
       <mesh geometry={geometry.canopy} material={foliageMaterial} />
       <instancedMesh
