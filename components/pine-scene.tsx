@@ -41,6 +41,7 @@ type IntroTimeline = {
   progress: number;
   fogDensity: number;
   complete: boolean;
+  cameraZoom: number;
   phase: "title" | "seed" | "drop" | "splash" | "sprout" | "complete";
   splash: {
     active: boolean;
@@ -149,10 +150,12 @@ type PineSceneProps = {
   selectedNode: PortfolioNode | null;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   onIntroComplete: () => void;
+  onAboutTextReveal: () => void;
   introTitleRef: { current: HTMLDivElement | null };
+  aboutTextRef: { current: HTMLElement | null };
 };
 
-export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll, onIntroComplete, introTitleRef }: PineSceneProps) {
+export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll, onIntroComplete, onAboutTextReveal, introTitleRef, aboutTextRef }: PineSceneProps) {
   const handleStage = useCallback(onStageChange, [onStageChange]);
   const handleScrollConnect = useCallback(onConnectScroll, [onConnectScroll]);
   const [nodesReady, setNodesReady] = useState(false);
@@ -165,6 +168,7 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
     progress: 0,
     fogDensity: 0.24,
     complete: false,
+    cameraZoom: 0,
     phase: "title",
     splash: {
       active: false,
@@ -205,6 +209,8 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
         <CameraController
           intro={intro}
           onIntroComplete={handleIntroComplete}
+          onAboutTextReveal={onAboutTextReveal}
+          aboutTextRef={aboutTextRef}
           onStageChange={handleStage}
           selectedNode={selectedNode}
           onSelectNode={onSelectNode}
@@ -227,6 +233,7 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     intro.elapsed = 0;
     intro.progress = 0;
     intro.complete = false;
+    intro.cameraZoom = 0;
     intro.phase = "title";
     Object.assign(intro.splash, {
       active: false,
@@ -276,37 +283,48 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
         dropletOpacity: 1,
       });
     });
+    timeline.addLabel("impact");
     timeline.to(intro.seed, {
       scaleX: 1.55,
       scaleY: 0.045,
       scaleZ: 1.55,
       duration: 0.12,
       ease: "power4.out",
-    });
+    }, "impact");
     timeline.to(intro.seed, {
       opacity: 0,
       duration: 0.18,
       ease: "power1.out",
       onComplete: () => { intro.seed.visible = false; },
-    }, "<+=0.025");
+    }, "impact+=0.025");
     timeline.to(intro.splash, {
-      rippleScale: 5,
+      rippleScale: 18,
       rippleFront: 1,
-      dropletProgress: 1,
-      duration: 0.56,
+      duration: 0.5,
       ease: "expo.out",
-    }, "<-=0.025");
+    }, "impact");
+    timeline.to(intro.splash, {
+      dropletProgress: 1,
+      duration: 0.95,
+      ease: "none",
+    }, "impact");
+    timeline.addLabel("puddle-rest", "impact+=0.5");
+    timeline.to({}, { duration: 0.2 }, "puddle-rest");
     timeline.to(intro.splash, {
       rippleOpacity: 0,
-      dropletOpacity: 0,
-      duration: 0.24,
+      duration: 0.3,
       ease: "power1.out",
       onStart: () => {
         intro.phase = "sprout";
         intro.elapsed = 0;
       },
       onComplete: () => { intro.splash.active = false; },
-    });
+    }, "puddle-rest+=0.2");
+    timeline.to(intro.splash, {
+      dropletOpacity: 0,
+      duration: 0.25,
+      ease: "power1.out",
+    }, "puddle-rest+=0.2");
     timeline.eventCallback("onComplete", () => {
       intro.seed.visible = false;
       intro.splash.active = false;
@@ -398,18 +416,18 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
   const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
   const dropletMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-    color: "#080807",
+    color: "#1a1a1a",
     transparent: true,
     opacity: 0,
     depthWrite: false,
     toneMapped: false,
   }), []);
   const particleTransform = useMemo(() => new THREE.Object3D(), []);
-  const particleLayout = useMemo(() => Array.from({ length: 30 }, (_, index) => ({
-    angle: (index / 30) * Math.PI * 2 + (seedUnit(23, index) - 0.5) * 0.24,
-    reach: 0.58 + seedUnit(41, index) * 1.05,
-    apex: 0.28 + seedUnit(59, index) * 0.52,
-    size: 0.018 + seedUnit(71, index) * 0.025,
+  const particleLayout = useMemo(() => Array.from({ length: 48 }, (_, index) => ({
+    angle: (index / 48) * Math.PI * 2 + (seedUnit(23, index) - 0.5) * 0.24,
+    reach: 1.25 + seedUnit(41, index) * 1.6,
+    apex: 2.2 + seedUnit(59, index) * 0.8,
+    size: 0.038 + seedUnit(71, index) * 0.045,
   })), []);
 
   useEffect(() => () => {
@@ -479,7 +497,7 @@ function createImpactRippleMaterial() {
       uFront: { value: 0 },
       uOpacity: { value: 0 },
       uTime: { value: 0 },
-      uInk: { value: new THREE.Color("#10100f") },
+      uInk: { value: new THREE.Color("#1a1a1a") },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -502,7 +520,7 @@ function createImpactRippleMaterial() {
         float waveDistance = abs(radius + radialDisplacement - uFront);
         float crown = exp(-waveDistance * 58.0);
         float trailingRing = exp(-abs(radius - uFront + 0.055) * 35.0);
-        float pooledInk = (1.0 - smoothstep(uFront - 0.1, uFront + 0.025, radius)) * 0.12;
+        float pooledInk = (1.0 - smoothstep(uFront - 0.1, uFront + 0.025, radius)) * 0.94;
         float paperFade = 1.0 - smoothstep(0.82, 1.0, radius);
         float alpha = (crown * 0.68 + trailingRing * 0.2 + pooledInk) * paperFade * uOpacity;
         if (alpha < 0.006) discard;
@@ -520,6 +538,8 @@ function createImpactRippleMaterial() {
 function CameraController({
   intro,
   onIntroComplete,
+  onAboutTextReveal,
+  aboutTextRef,
   onStageChange,
   selectedNode,
   onSelectNode,
@@ -527,6 +547,8 @@ function CameraController({
 }: {
   intro: IntroTimeline;
   onIntroComplete: () => void;
+  onAboutTextReveal: () => void;
+  aboutTextRef: { current: HTMLElement | null };
   onStageChange: (stage: StageName) => void;
   selectedNode: PortfolioNode | null;
   onSelectNode: (node: PortfolioNode | null) => void;
@@ -535,8 +557,9 @@ function CameraController({
   const scroll = useScroll();
   const lastStage = useRef<StageName>("trunk");
   const introCompleteNotified = useRef(false);
+  const introZoomStarted = useRef(false);
+  const introZoomTimeline = useRef<gsap.core.Timeline | null>(null);
   const zoom = useRef(0);
-  const introZoom = useRef(0);
   const rawScrollOffset = useRef(0.5);
   const focusNode = useRef<PortfolioNode | null>(null);
   const dismissedNode = useRef<string | null>(null);
@@ -546,6 +569,10 @@ function CameraController({
   const focusedTarget = useMemo(() => new THREE.Vector3(), []);
   const cameraPosition = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => () => {
+    introZoomTimeline.current?.kill();
+  }, []);
 
   useEffect(() => {
     const element = scroll.el;
@@ -596,11 +623,29 @@ function CameraController({
     // The center page is the trunk; offset 0 is the canopy and 1 is the roots.
     // Camera Y is assigned directly from ScrollControls every frame.
     const cameraY = THREE.MathUtils.lerp(4.5, -2.4, offset);
-    const centered = Math.abs(offset - 0.5) < 0.16;
-    const introZoomTarget = intro.complete && centered ? 1 : 0;
-    introZoom.current = THREE.MathUtils.damp(introZoom.current, introZoomTarget, 1.8, delta);
+    const centered = stage === "trunk" && Math.abs(offset - 0.5) < 0.16;
+    if (intro.complete && centered && !introZoomStarted.current) {
+      introZoomStarted.current = true;
+      const timeline = gsap.timeline();
+      timeline.to(intro, {
+        cameraZoom: 1,
+        duration: 1.35,
+        ease: "power2.inOut",
+      });
+      if (aboutTextRef.current) {
+        timeline.to(aboutTextRef.current, {
+          autoAlpha: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.37,
+          ease: "power2.out",
+          onStart: onAboutTextReveal,
+        }, "<0.98");
+      }
+      introZoomTimeline.current = timeline;
+    }
     const trunkProximity = 1 - smoothStep(0.015, 0.18, Math.abs(offset - 0.5));
-    const trunkZoom = introZoom.current * trunkProximity;
+    const trunkZoom = intro.cameraZoom * trunkProximity;
     const cameraX = 1.48;
     const cameraZ = THREE.MathUtils.lerp(14.2, 1.85, trunkZoom);
     baseCamera.set(cameraX, cameraY, cameraZ);
@@ -620,9 +665,10 @@ function CameraController({
       if (!selectedNode && zoom.current < 0.012) focusNode.current = null;
     }
 
-    camera.position.x = THREE.MathUtils.damp(camera.position.x, cameraPosition.x, 5, delta);
-    camera.position.y = THREE.MathUtils.damp(camera.position.y, cameraPosition.y, 5, delta);
-    camera.position.z = THREE.MathUtils.damp(camera.position.z, cameraPosition.z, 5, delta);
+    const cameraDamping = introZoomStarted.current && !introCompleteNotified.current ? 16 : 5;
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, cameraPosition.x, cameraDamping, delta);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, cameraPosition.y, cameraDamping, delta);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, cameraPosition.z, cameraDamping, delta);
     camera.lookAt(lookTarget);
 
     // Keep every node hidden until the trunk zoom has reached its target and

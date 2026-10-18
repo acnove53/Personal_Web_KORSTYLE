@@ -30,10 +30,12 @@ const stageOrder: { stage: StageName; number: string; label: string }[] = [
 
 export function PinePortfolio() {
   const introTitleRef = useRef<HTMLDivElement>(null);
+  const aboutTextRef = useRef<HTMLElement>(null);
   const [stage, setStage] = useState<StageName>("trunk");
   const [selected, setSelected] = useState<PortfolioNode | null>(null);
   const [scrollToStage, setScrollToStage] = useState<((stage: StageName) => void) | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
+  const [aboutTextRevealed, setAboutTextRevealed] = useState(false);
 
   const connectScroll = useCallback((scroll: (stage: StageName) => void) => {
     setScrollToStage(() => scroll);
@@ -51,6 +53,10 @@ export function PinePortfolio() {
     setSelected(node);
   }, []);
 
+  const handleAboutTextReveal = useCallback(() => {
+    setAboutTextRevealed(true);
+  }, []);
+
   return (
     <main id="top" className={`portfolio-shell ${sceneReady ? "scene-ready" : ""}`}>
       <div className="scene-backdrop" aria-hidden="true" />
@@ -61,7 +67,9 @@ export function PinePortfolio() {
           selectedNode={selected}
           onConnectScroll={connectScroll}
           onIntroComplete={() => setSceneReady(true)}
+          onAboutTextReveal={handleAboutTextReveal}
           introTitleRef={introTitleRef}
+          aboutTextRef={aboutTextRef}
         />
       </div>
 
@@ -102,8 +110,18 @@ export function PinePortfolio() {
         <div className="index-bottom">SCROLL TO<br />MOVE THROUGH THE TREE</div>
       </div>
 
+      {!selected && stage === "trunk" && (
+        <section
+          ref={aboutTextRef}
+          className={`chapter-intro chapter-trunk ${aboutTextRevealed ? "" : "chapter-intro-pending"}`}
+          aria-hidden={!aboutTextRevealed}
+        >
+          <ChapterContent stage="trunk" scrollToStage={scrollToStage} />
+        </section>
+      )}
+
       <AnimatePresence mode="wait" initial={false}>
-        {sceneReady && !selected && (
+        {sceneReady && !selected && stage !== "trunk" && (
           <motion.section
             key={stage}
             className={`chapter-intro chapter-${stage}`}
@@ -112,28 +130,7 @@ export function PinePortfolio() {
             exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p className="eyebrow"><span className="eyebrow-seal" aria-hidden="true">•</span>{stageCopy[stage].chapter}</p>
-            <h1>{stage === "trunk" ? <>Jinyoung<br />Daniel Jeon<span className="title-period">.</span></> : stageCopy[stage].title}</h1>
-            <p className="chapter-tagline">{stageCopy[stage].note}</p>
-            {stage === "trunk" ? (
-              <>
-                <p className="hero-summary">
-                  I am an engineer who seeks to understand low-level mechanisms before relying on
-                  high-level applications. Just as I bridged languages and cultures as a KATUSA
-                  interpreter, I now translate the strict rules of hardware into the flexible logic
-                  of artificial intelligence. I build solid underlying structures and scalable
-                  systems above them.
-                </p>
-                <div className="hero-actions">
-                  <button className="text-action" onClick={() => scrollToStage?.("branches")}>
-                    EXPLORE SELECTED WORK <span aria-hidden="true">↗</span>
-                  </button>
-                  <span className="hero-location">ATLANTA, GA <span>·</span> GT ’25</span>
-                </div>
-              </>
-            ) : (
-              <p className="chapter-prompt">Select a glowing mark to open its field note.</p>
-            )}
+            <ChapterContent stage={stage} scrollToStage={scrollToStage} />
           </motion.section>
         )}
       </AnimatePresence>
@@ -166,6 +163,38 @@ export function PinePortfolio() {
         <a href="mailto:hello@jinyoungjeon.dev">SAY HELLO ↗</a>
       </footer>
     </main>
+  );
+}
+
+function ChapterContent({ stage, scrollToStage }: {
+  stage: StageName;
+  scrollToStage: ((stage: StageName) => void) | null;
+}) {
+  return (
+    <>
+      <p className="eyebrow"><span className="eyebrow-seal" aria-hidden="true">•</span>{stageCopy[stage].chapter}</p>
+      <h1>{stage === "trunk" ? <>Jinyoung<br />Daniel Jeon<span className="title-period">.</span></> : stageCopy[stage].title}</h1>
+      <p className="chapter-tagline">{stageCopy[stage].note}</p>
+      {stage === "trunk" ? (
+        <>
+          <p className="hero-summary">
+            I am an engineer who seeks to understand low-level mechanisms before relying on
+            high-level applications. Just as I bridged languages and cultures as a KATUSA
+            interpreter, I now translate the strict rules of hardware into the flexible logic
+            of artificial intelligence. I build solid underlying structures and scalable
+            systems above them.
+          </p>
+          <div className="hero-actions">
+            <button className="text-action" onClick={() => scrollToStage?.("branches")}>
+              EXPLORE SELECTED WORK <span aria-hidden="true">↗</span>
+            </button>
+            <span className="hero-location">ATLANTA, GA <span>·</span> GT ’25</span>
+          </div>
+        </>
+      ) : (
+        <p className="chapter-prompt">Select a glowing mark to open its field note.</p>
+      )}
+    </>
   );
 }
 
