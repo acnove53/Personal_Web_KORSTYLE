@@ -48,6 +48,7 @@ type IntroTimeline = {
     rippleScale: number;
     rippleFront: number;
     rippleOpacity: number;
+    puddleOpacity: number;
     dropletProgress: number;
     dropletOpacity: number;
   };
@@ -175,6 +176,7 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
       rippleScale: 0,
       rippleFront: 0,
       rippleOpacity: 0,
+      puddleOpacity: 0,
       dropletProgress: 0,
       dropletOpacity: 0,
     },
@@ -240,6 +242,7 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
       rippleScale: 0,
       rippleFront: 0,
       rippleOpacity: 0,
+      puddleOpacity: 0,
       dropletProgress: 0,
       dropletOpacity: 0,
     });
@@ -279,6 +282,7 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
         rippleScale: 0,
         rippleFront: 0,
         rippleOpacity: 1,
+        puddleOpacity: 1,
         dropletProgress: 0,
         dropletOpacity: 1,
       });
@@ -323,6 +327,11 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     timeline.to(intro.splash, {
       dropletOpacity: 0,
       duration: 0.25,
+      ease: "power1.out",
+    }, "puddle-rest+=0.2");
+    timeline.to(intro.splash, {
+      puddleOpacity: 0,
+      duration: 0.34,
       ease: "power1.out",
     }, "puddle-rest+=0.2");
     timeline.eventCallback("onComplete", () => {
@@ -410,10 +419,20 @@ function SeedParticle({ intro }: { intro: IntroTimeline }) {
 }
 
 function ImpactSplash({ intro }: { intro: IntroTimeline }) {
+  const puddle = useRef<THREE.Mesh>(null);
   const ripple = useRef<THREE.Mesh>(null);
   const droplets = useRef<THREE.InstancedMesh>(null);
+  const puddleGeometry = useMemo(() => createInkPuddleGeometry(), []);
   const rippleGeometry = useMemo(() => new THREE.CircleGeometry(1, 96), []);
   const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
+  const puddleMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    color: "#0a0a0a",
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  }), []);
   const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
   const dropletMaterial = useMemo(() => new THREE.MeshBasicMaterial({
     color: "#1a1a1a",
@@ -431,14 +450,22 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   })), []);
 
   useEffect(() => () => {
+    puddleGeometry.dispose();
     rippleGeometry.dispose();
     dropletGeometry.dispose();
+    puddleMaterial.dispose();
     rippleMaterial.dispose();
     dropletMaterial.dispose();
-  }, [dropletGeometry, dropletMaterial, rippleGeometry, rippleMaterial]);
+  }, [dropletGeometry, dropletMaterial, puddleGeometry, puddleMaterial, rippleGeometry, rippleMaterial]);
 
   useFrame(({ clock }) => {
     const splash = intro.splash;
+    if (puddle.current) {
+      puddle.current.visible = splash.active && splash.puddleOpacity > 0.002;
+      puddle.current.position.set(intro.seed.x, 0.009, intro.seed.z);
+      puddle.current.scale.setScalar(splash.rippleScale);
+      puddleMaterial.opacity = splash.puddleOpacity;
+    }
     if (ripple.current) {
       ripple.current.visible = splash.active && splash.rippleOpacity > 0.002;
       ripple.current.position.set(intro.seed.x, 0.012, intro.seed.z);
@@ -472,6 +499,15 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   return (
     <group position={[1.45, -2.8, 0]}>
       <mesh
+        ref={puddle}
+        geometry={puddleGeometry}
+        material={puddleMaterial}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={0}
+        visible={false}
+        renderOrder={3}
+      />
+      <mesh
         ref={ripple}
         geometry={rippleGeometry}
         material={rippleMaterial}
@@ -491,13 +527,33 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   );
 }
 
+function createInkPuddleGeometry() {
+  const geometry = new THREE.CircleGeometry(1, 128);
+  const positions = geometry.getAttribute("position");
+  for (let index = 0; index < positions.count; index++) {
+    const x = positions.getX(index);
+    const y = positions.getY(index);
+    const radius = Math.hypot(x, y);
+    if (radius < 0.001) continue;
+    const angle = Math.atan2(y, x);
+    const edgeVariation = 1
+      + Math.sin(angle * 5 + 0.4) * 0.055
+      + Math.sin(angle * 11 - 0.7) * 0.025
+      + Math.cos(angle * 17 + 1.3) * 0.012;
+    positions.setXY(index, x * edgeVariation, y * edgeVariation);
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function createImpactRippleMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       uFront: { value: 0 },
       uOpacity: { value: 0 },
       uTime: { value: 0 },
-      uInk: { value: new THREE.Color("#1a1a1a") },
+      uInk: { value: new THREE.Color("#0a0a0a") },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -520,7 +576,7 @@ function createImpactRippleMaterial() {
         float waveDistance = abs(radius + radialDisplacement - uFront);
         float crown = exp(-waveDistance * 58.0);
         float trailingRing = exp(-abs(radius - uFront + 0.055) * 35.0);
-        float pooledInk = (1.0 - smoothstep(uFront - 0.1, uFront + 0.025, radius)) * 0.94;
+        float pooledInk = (1.0 - smoothstep(uFront - 0.1, uFront + 0.025, radius));
         float paperFade = 1.0 - smoothstep(0.82, 1.0, radius);
         float alpha = (crown * 0.68 + trailingRing * 0.2 + pooledInk) * paperFade * uOpacity;
         if (alpha < 0.006) discard;

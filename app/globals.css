@@ -69,9 +69,10 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--stamp); outline
 .stage-link.is-current .stage-link-dot { background: var(--stamp); border-color: var(--stamp); box-shadow: 0 0 0 3px rgba(217,56,30,.1); }
 .index-bottom { margin-top: 19px; color: #aaa39b; font: 7px/1.8 var(--mono); letter-spacing: .1em; }
 
+.about-overlay { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; pointer-events: none; }
 .chapter-intro { left: 17.3vw; top: 50%; width: min(490px, 41vw); translate: 0 -48%; }
 .chapter-intro-pending { opacity: 0; visibility: hidden; }
-.chapter-intro.chapter-trunk { left: 50%; top: 50%; width: min(850px, 86vw); padding: clamp(22px, 3.4vw, 42px); translate: -50% -50%; border: 1px solid rgba(249,248,246,.28); background: linear-gradient(145deg, rgba(20,19,18,.52), rgba(20,19,18,.43)); -webkit-backdrop-filter: blur(16px) saturate(.78); backdrop-filter: blur(16px) saturate(.78); box-shadow: 0 12px 48px rgba(24,22,19,.08); text-align: center; }
+.about-overlay > .chapter-intro.chapter-trunk { position: relative; inset: auto; left: auto; top: auto; right: auto; bottom: auto; width: min(850px, 86vw); margin: 0; translate: none; padding: clamp(22px, 3.4vw, 42px); border: 1px solid rgba(249,248,246,.28); background: linear-gradient(145deg, rgba(20,19,18,.52), rgba(20,19,18,.43)); -webkit-backdrop-filter: blur(16px) saturate(.78); backdrop-filter: blur(16px) saturate(.78); box-shadow: 0 12px 48px rgba(24,22,19,.08); text-align: center; }
 .chapter-intro.chapter-trunk .eyebrow { justify-content: center; color: rgba(249,248,246,.72); }
 .chapter-intro.chapter-trunk h1 { color: #f9f8f6; font-size: clamp(48px, 6.8vw, 88px); text-shadow: 0 2px 12px rgba(0,0,0,.24); }
 .chapter-intro.chapter-trunk .chapter-tagline { color: rgba(249,248,246,.92); text-shadow: 0 1px 9px rgba(0,0,0,.65); }
@@ -172,7 +173,7 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--stamp); outline
   .stage-link-name { font-size: 10px; }
   .stage-link-dot { display: none; }
   .chapter-intro { left: 20px; top: 45%; width: min(88vw, 420px); translate: 0 -50%; }
-  .chapter-intro.chapter-trunk { left: 50%; top: 50%; width: min(92vw, 620px); padding: 20px 18px; translate: -50% -50%; }
+  .about-overlay > .chapter-intro.chapter-trunk { width: min(92vw, 620px); padding: 20px 18px; }
   .chapter-intro h1 { font-size: clamp(42px, 12vw, 62px); }
   .eyebrow { margin-bottom: 17px; font-size: 8px; }
   .chapter-tagline { max-width: 290px; margin-top: 16px; font-size: 12px; }

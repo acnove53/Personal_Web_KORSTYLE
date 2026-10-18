@@ -111,13 +111,14 @@ export function PinePortfolio() {
       </div>
 
       {!selected && stage === "trunk" && (
-        <section
-          ref={aboutTextRef}
-          className={`chapter-intro chapter-trunk ${aboutTextRevealed ? "" : "chapter-intro-pending"}`}
-          aria-hidden={!aboutTextRevealed}
-        >
-          <ChapterContent stage="trunk" scrollToStage={scrollToStage} />
-        </section>
+        <div className="about-overlay" aria-hidden={!aboutTextRevealed}>
+          <section
+            ref={aboutTextRef}
+            className={`chapter-intro chapter-trunk ${aboutTextRevealed ? "" : "chapter-intro-pending"}`}
+          >
+            <ChapterContent stage="trunk" scrollToStage={scrollToStage} />
+          </section>
+        </div>
       )}
 
       <AnimatePresence mode="wait" initial={false}>
