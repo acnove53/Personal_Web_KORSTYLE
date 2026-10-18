@@ -34,8 +34,18 @@ type IntroTimeline = {
   progress: number;
   fogDensity: number;
   complete: boolean;
-  phase: "title" | "seed" | "drop" | "sprout" | "complete";
-  seed: { x: number; y: number; z: number; scale: number; opacity: number; visible: boolean };
+  nodesReady: boolean;
+  phase: "title" | "seed" | "drop" | "splash" | "sprout" | "complete";
+  seed: {
+    x: number;
+    y: number;
+    z: number;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
+    opacity: number;
+    visible: boolean;
+  };
 };
 
 const portfolioNodes: PortfolioNode[] = [
@@ -144,8 +154,9 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
     progress: 0,
     fogDensity: 0.24,
     complete: false,
+    nodesReady: false,
     phase: "title",
-    seed: { x: 0.06, y: 3.85, z: 0, scale: 0, opacity: 0, visible: false },
+    seed: { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false },
   }), []);
 
   return (
@@ -197,8 +208,9 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     intro.elapsed = 0;
     intro.progress = 0;
     intro.complete = false;
+    intro.nodesReady = false;
     intro.phase = "title";
-    Object.assign(intro.seed, { x: 0.06, y: 3.85, z: 0, scale: 0, opacity: 0, visible: false });
+    Object.assign(intro.seed, { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false });
     gsap.set(title, { opacity: 0, scale: 0.94, filter: "blur(12px)" });
 
     const timeline = gsap.timeline();
@@ -213,7 +225,9 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
       onStart: () => { intro.phase = "seed"; },
     });
     timeline.to(intro.seed, {
-      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
       opacity: 1,
       duration: 0.56,
       ease: "power2.out",
@@ -225,19 +239,26 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
       ease: "power2.in",
       onStart: () => { intro.phase = "drop"; },
     });
-    timeline.to({}, { duration: 0.1 });
     timeline.to(intro.seed, {
-      y: -0.3,
-      scale: 0.08,
+      scaleX: 7,
+      scaleY: 0.015,
+      scaleZ: 7,
+      duration: 0.34,
+      ease: "expo.out",
+      onStart: () => { intro.phase = "splash"; },
+    });
+    timeline.to(intro.seed, {
       opacity: 0,
-      duration: 0.42,
-      ease: "power2.in",
+      duration: 0.14,
+      ease: "power1.out",
+      onStart: () => {
+        intro.phase = "sprout";
+        intro.elapsed = 0;
+      },
       onComplete: () => { intro.seed.visible = false; },
     });
     timeline.eventCallback("onComplete", () => {
       intro.seed.visible = false;
-      intro.phase = "sprout";
-      intro.elapsed = 0;
     });
 
     return () => {
@@ -306,7 +327,7 @@ function SeedParticle({ intro }: { intro: IntroTimeline }) {
     seed.visible = state.visible;
     if (!state.visible) return;
     seed.position.set(state.x, state.y, state.z);
-    seed.scale.setScalar(state.scale);
+    seed.scale.set(state.scaleX, state.scaleY, state.scaleZ);
     (seed.material as THREE.MeshBasicMaterial).opacity = state.opacity;
   });
 
@@ -403,11 +424,6 @@ function CameraController({
     introZoom.current = THREE.MathUtils.damp(introZoom.current, introZoomTarget, 1.8, delta);
     const trunkProximity = 1 - smoothStep(0.015, 0.18, Math.abs(offset - 0.5));
     const trunkZoom = introZoom.current * trunkProximity;
-    if (!introCompleteNotified.current && trunkZoom > 0.985) {
-      introCompleteNotified.current = true;
-      onIntroComplete();
-    }
-
     const cameraX = 1.48;
     const cameraZ = THREE.MathUtils.lerp(14.2, 1.85, trunkZoom);
     baseCamera.set(cameraX, cameraY, cameraZ);
@@ -431,6 +447,17 @@ function CameraController({
     camera.position.y = THREE.MathUtils.damp(camera.position.y, cameraPosition.y, 5, delta);
     camera.position.z = THREE.MathUtils.damp(camera.position.z, cameraPosition.z, 5, delta);
     camera.lookAt(lookTarget);
+
+    // Keep every node hidden until the trunk zoom has reached its target and
+    // the camera itself has settled. Nodes become available on later scrolls.
+    const cameraSettled = camera.position.distanceTo(cameraPosition) < 0.045;
+    if (!intro.nodesReady && intro.complete && centered && trunkZoom > 0.985 && cameraSettled) {
+      intro.nodesReady = true;
+      if (!introCompleteNotified.current) {
+        introCompleteNotified.current = true;
+        onIntroComplete();
+      }
+    }
   });
 
   return null;
@@ -1145,8 +1172,8 @@ function PineTree({
     brushMaterial.uniforms.uProgress.value = intro.progress;
     brushMaterial.uniforms.uFogDensity.value = intro.fogDensity;
     brushMaterial.uniforms.uTime.value = windTime;
-    if (branchNodes.current) branchNodes.current.visible = scroll.offset < 0.37;
-    if (rootNodes.current) rootNodes.current.visible = scroll.offset > 0.63;
+    if (branchNodes.current) branchNodes.current.visible = intro.nodesReady && scroll.offset < 0.37;
+    if (rootNodes.current) rootNodes.current.visible = intro.nodesReady && scroll.offset > 0.63;
 
     if (brushMesh.current && (!matricesReady.current || camera.quaternion.angleTo(previousCameraRotation) > 0.0005)) {
       geometry.foliage.forEach((stroke, index) => {

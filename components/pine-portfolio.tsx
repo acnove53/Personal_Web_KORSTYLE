@@ -112,7 +112,7 @@ export function PinePortfolio() {
             exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p className="eyebrow"><span className="eyebrow-seal">印</span>{stageCopy[stage].chapter}</p>
+            <p className="eyebrow"><span className="eyebrow-seal" aria-hidden="true">•</span>{stageCopy[stage].chapter}</p>
             <h1>{stage === "trunk" ? <>Jinyoung<br />Daniel Jeon<span className="title-period">.</span></> : stageCopy[stage].title}</h1>
             <p className="chapter-tagline">{stageCopy[stage].note}</p>
             {stage === "trunk" ? (
@@ -162,7 +162,7 @@ export function PinePortfolio() {
 
       <footer className="site-footer">
         <span>© 2026 JINYOUNG DANIEL JEON</span>
-        <span className="footer-center">根から枝葉まで — FROM ROOTS TO REASONING</span>
+        <span className="footer-center">FROM ROOTS TO REASONING</span>
         <a href="mailto:hello@jinyoungjeon.dev">SAY HELLO ↗</a>
       </footer>
     </main>
@@ -188,7 +188,7 @@ function DetailCard({ node, onClose }: { node: PortfolioNode; onClose: () => voi
       </div>
       <p className="detail-category">{node.category}</p>
       <h2 id="detail-title">{node.title}</h2>
-      <div className="detail-divider"><span>印</span></div>
+      <div className="detail-divider"><span aria-hidden="true">•</span></div>
       <p className="detail-description">{node.description}</p>
       {node.highlights && (
         <ul className="detail-highlights">
