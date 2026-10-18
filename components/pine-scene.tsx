@@ -412,7 +412,7 @@ function SeedParticle({ intro }: { intro: IntroTimeline }) {
   return (
     <group position={[1.45, -2.8, 0]}>
       <mesh ref={seedRef} geometry={geometry} visible={false} renderOrder={10}>
-        <meshBasicMaterial color="#080807" transparent opacity={0} depthWrite={false} fog={false} />
+        <meshBasicMaterial color="#000000" transparent opacity={0} depthWrite={false} fog={false} toneMapped={false} />
       </mesh>
     </group>
   );
@@ -432,6 +432,7 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
     depthWrite: false,
     side: THREE.DoubleSide,
     toneMapped: false,
+    fog: false,
   }), []);
   const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
   const dropletMaterial = useMemo(() => new THREE.MeshBasicMaterial({
@@ -440,6 +441,7 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
     opacity: 0,
     depthWrite: false,
     toneMapped: false,
+    fog: false,
   }), []);
   const particleTransform = useMemo(() => new THREE.Object3D(), []);
   const particleLayout = useMemo(() => Array.from({ length: 48 }, (_, index) => ({
