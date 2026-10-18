@@ -426,7 +426,7 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   const rippleGeometry = useMemo(() => new THREE.CircleGeometry(1, 96), []);
   const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
   const puddleMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-    color: "#0a0a0a",
+    color: "#000000",
     transparent: true,
     opacity: 0,
     depthWrite: false,
@@ -435,7 +435,7 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   }), []);
   const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
   const dropletMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-    color: "#1a1a1a",
+    color: "#000000",
     transparent: true,
     opacity: 0,
     depthWrite: false,
@@ -553,7 +553,7 @@ function createImpactRippleMaterial() {
       uFront: { value: 0 },
       uOpacity: { value: 0 },
       uTime: { value: 0 },
-      uInk: { value: new THREE.Color("#0a0a0a") },
+      uInk: { value: new THREE.Color("#000000") },
     },
     vertexShader: `
       varying vec2 vUv;
