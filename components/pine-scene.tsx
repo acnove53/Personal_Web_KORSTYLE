@@ -6,7 +6,7 @@ import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { ThreeEvent } from "@react-three/fiber";
 import { Html, ScrollControls, useScroll } from "@react-three/drei";
 import { gsap } from "gsap";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type StageName = "branches" | "trunk" | "roots";
 
@@ -29,13 +29,27 @@ type BrushStroke = {
   rotation: number;
 };
 
+type PineGeometry = {
+  structure: THREE.BufferGeometry;
+  canopy: THREE.BufferGeometry;
+  foliage: BrushStroke[];
+  nodePositions: Record<string, THREE.Vector3>;
+};
+
 type IntroTimeline = {
   elapsed: number;
   progress: number;
   fogDensity: number;
   complete: boolean;
-  nodesReady: boolean;
   phase: "title" | "seed" | "drop" | "splash" | "sprout" | "complete";
+  splash: {
+    active: boolean;
+    rippleScale: number;
+    rippleFront: number;
+    rippleOpacity: number;
+    dropletProgress: number;
+    dropletOpacity: number;
+  };
   seed: {
     x: number;
     y: number;
@@ -48,7 +62,7 @@ type IntroTimeline = {
   };
 };
 
-const portfolioNodes: PortfolioNode[] = [
+const portfolioNodes: Omit<PortfolioNode, "position">[] = [
   {
     id: "timeslips",
     number: "01",
@@ -58,7 +72,6 @@ const portfolioNodes: PortfolioNode[] = [
     stack: ["React Native", "AWS Serverless", "AWS Bedrock"],
     highlights: ["Context-aware coaching for care facilitators", "Scalable cloud-native architecture"],
     stage: "branches",
-    position: [-0.85, 6.65, 0.35],
   },
   {
     id: "travel-health",
@@ -68,7 +81,6 @@ const portfolioNodes: PortfolioNode[] = [
     description: "A context-aware recommendation agent that helps travelers make dietary and health choices with local context in mind. Prompt design connects itinerary, food, and personal needs into a practical coaching experience.",
     stack: ["Python", "LLMs", "Prompt Design"],
     stage: "branches",
-    position: [1.15, 6.1, 0.55],
   },
   {
     id: "neural-vision",
@@ -79,7 +91,6 @@ const portfolioNodes: PortfolioNode[] = [
     stack: ["JAX", "VGG19", "PACE H100"],
     highlights: ["Classified 75 butterfly species", "Built backpropagation from scratch"],
     stage: "branches",
-    position: [-1.35, 5.25, 0.45],
   },
   {
     id: "bytefight",
@@ -89,7 +100,6 @@ const portfolioNodes: PortfolioNode[] = [
     description: "A Python strategy agent that reasons about a changing game state and makes decisions under strict compute-time limits. Custom pathfinding heuristics help balance search depth with fast, reliable moves.",
     stack: ["Python", "Pathfinding", "Heuristics"],
     stage: "branches",
-    position: [1.25, 4.75, 0.35],
   },
   {
     id: "jobjoe",
@@ -100,7 +110,6 @@ const portfolioNodes: PortfolioNode[] = [
     stack: ["Django", "SQLite", "Scrum"],
     highlights: ["Optimized relational data model", "Facilitated two-week sprint cycles"],
     stage: "branches",
-    position: [0.05, 7.25, -0.2],
   },
   {
     id: "northbound",
@@ -111,7 +120,6 @@ const portfolioNodes: PortfolioNode[] = [
     stack: ["Express", "PostgreSQL", "Gemini API", "Zod"],
     highlights: ["Enforced structured pipelines with Zod", "Documented APIs with OpenAPI 3.1"],
     stage: "roots",
-    position: [-1.45, 0.9, 0.6],
   },
   {
     id: "katusa",
@@ -122,7 +130,6 @@ const portfolioNodes: PortfolioNode[] = [
     stack: ["Interpretation", "Leadership", "Communication"],
     highlights: ["Supported communications for 500+ personnel", "Bridged Korean and U.S. military cultures"],
     stage: "roots",
-    position: [1.25, 0.45, 0.45],
   },
   {
     id: "georgia-tech",
@@ -133,7 +140,6 @@ const portfolioNodes: PortfolioNode[] = [
     stack: ["Intelligence", "Devices", "Hardware / Software"],
     highlights: ["Faculty Honors · 3.92 / 4.00 GPA", "Focus on hardware-software co-design"],
     stage: "roots",
-    position: [0.05, -0.55, 0.15],
   },
 ];
 
@@ -149,13 +155,25 @@ type PineSceneProps = {
 export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnectScroll, onIntroComplete, introTitleRef }: PineSceneProps) {
   const handleStage = useCallback(onStageChange, [onStageChange]);
   const handleScrollConnect = useCallback(onConnectScroll, [onConnectScroll]);
+  const [nodesReady, setNodesReady] = useState(false);
+  const handleIntroComplete = useCallback(() => {
+    setNodesReady(true);
+    onIntroComplete();
+  }, [onIntroComplete]);
   const intro = useMemo<IntroTimeline>(() => ({
     elapsed: 0,
     progress: 0,
     fogDensity: 0.24,
     complete: false,
-    nodesReady: false,
     phase: "title",
+    splash: {
+      active: false,
+      rippleScale: 0,
+      rippleFront: 0,
+      rippleOpacity: 0,
+      dropletProgress: 0,
+      dropletOpacity: 0,
+    },
     seed: { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false },
   }), []);
 
@@ -173,6 +191,7 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
       <directionalLight position={[6, 3, -5]} intensity={0.45} color="#9d9a96" />
       <IntroSequence intro={intro} titleRef={introTitleRef} />
       <SeedParticle intro={intro} />
+      <ImpactSplash intro={intro} />
       <EffectComposer multisampling={0} resolutionScale={0.75}>
         <Bloom
           intensity={0.7}
@@ -185,13 +204,13 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
       <ScrollControls pages={3} damping={0.16} maxSpeed={0.9} distance={1}>
         <CameraController
           intro={intro}
-          onIntroComplete={onIntroComplete}
+          onIntroComplete={handleIntroComplete}
           onStageChange={handleStage}
           selectedNode={selectedNode}
           onSelectNode={onSelectNode}
           onConnectScroll={handleScrollConnect}
         />
-        <PineTree intro={intro} selectedNode={selectedNode} onSelectNode={onSelectNode} />
+        <PineTree intro={intro} nodesReady={nodesReady} selectedNode={selectedNode} onSelectNode={onSelectNode} />
       </ScrollControls>
     </Canvas>
   );
@@ -208,8 +227,15 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     intro.elapsed = 0;
     intro.progress = 0;
     intro.complete = false;
-    intro.nodesReady = false;
     intro.phase = "title";
+    Object.assign(intro.splash, {
+      active: false,
+      rippleScale: 0,
+      rippleFront: 0,
+      rippleOpacity: 0,
+      dropletProgress: 0,
+      dropletOpacity: 0,
+    });
     Object.assign(intro.seed, { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false });
     gsap.set(title, { opacity: 0, scale: 0.94, filter: "blur(12px)" });
 
@@ -239,26 +265,51 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
       ease: "power2.in",
       onStart: () => { intro.phase = "drop"; },
     });
+    timeline.call(() => {
+      intro.phase = "splash";
+      Object.assign(intro.splash, {
+        active: true,
+        rippleScale: 0,
+        rippleFront: 0,
+        rippleOpacity: 1,
+        dropletProgress: 0,
+        dropletOpacity: 1,
+      });
+    });
     timeline.to(intro.seed, {
-      scaleX: 7,
-      scaleY: 0.015,
-      scaleZ: 7,
-      duration: 0.34,
-      ease: "expo.out",
-      onStart: () => { intro.phase = "splash"; },
+      scaleX: 1.55,
+      scaleY: 0.045,
+      scaleZ: 1.55,
+      duration: 0.12,
+      ease: "power4.out",
     });
     timeline.to(intro.seed, {
       opacity: 0,
-      duration: 0.14,
+      duration: 0.18,
+      ease: "power1.out",
+      onComplete: () => { intro.seed.visible = false; },
+    }, "<+=0.025");
+    timeline.to(intro.splash, {
+      rippleScale: 5,
+      rippleFront: 1,
+      dropletProgress: 1,
+      duration: 0.56,
+      ease: "expo.out",
+    }, "<-=0.025");
+    timeline.to(intro.splash, {
+      rippleOpacity: 0,
+      dropletOpacity: 0,
+      duration: 0.24,
       ease: "power1.out",
       onStart: () => {
         intro.phase = "sprout";
         intro.elapsed = 0;
       },
-      onComplete: () => { intro.seed.visible = false; },
+      onComplete: () => { intro.splash.active = false; },
     });
     timeline.eventCallback("onComplete", () => {
       intro.seed.visible = false;
+      intro.splash.active = false;
     });
 
     return () => {
@@ -338,6 +389,132 @@ function SeedParticle({ intro }: { intro: IntroTimeline }) {
       </mesh>
     </group>
   );
+}
+
+function ImpactSplash({ intro }: { intro: IntroTimeline }) {
+  const ripple = useRef<THREE.Mesh>(null);
+  const droplets = useRef<THREE.InstancedMesh>(null);
+  const rippleGeometry = useMemo(() => new THREE.CircleGeometry(1, 96), []);
+  const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
+  const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
+  const dropletMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    color: "#080807",
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    toneMapped: false,
+  }), []);
+  const particleTransform = useMemo(() => new THREE.Object3D(), []);
+  const particleLayout = useMemo(() => Array.from({ length: 30 }, (_, index) => ({
+    angle: (index / 30) * Math.PI * 2 + (seedUnit(23, index) - 0.5) * 0.24,
+    reach: 0.58 + seedUnit(41, index) * 1.05,
+    apex: 0.28 + seedUnit(59, index) * 0.52,
+    size: 0.018 + seedUnit(71, index) * 0.025,
+  })), []);
+
+  useEffect(() => () => {
+    rippleGeometry.dispose();
+    dropletGeometry.dispose();
+    rippleMaterial.dispose();
+    dropletMaterial.dispose();
+  }, [dropletGeometry, dropletMaterial, rippleGeometry, rippleMaterial]);
+
+  useFrame(({ clock }) => {
+    const splash = intro.splash;
+    if (ripple.current) {
+      ripple.current.visible = splash.active && splash.rippleOpacity > 0.002;
+      ripple.current.position.set(intro.seed.x, 0.012, intro.seed.z);
+      ripple.current.scale.setScalar(splash.rippleScale);
+      rippleMaterial.uniforms.uFront.value = splash.rippleFront;
+      rippleMaterial.uniforms.uOpacity.value = splash.rippleOpacity;
+      rippleMaterial.uniforms.uTime.value = clock.elapsedTime;
+    }
+
+    const mesh = droplets.current;
+    if (!mesh) return;
+    mesh.visible = splash.active && splash.dropletOpacity > 0.002;
+    dropletMaterial.opacity = splash.dropletOpacity;
+    const progress = THREE.MathUtils.clamp(splash.dropletProgress, 0, 1);
+    particleLayout.forEach((particle, index) => {
+      const travel = progress * particle.reach;
+      const height = 4 * particle.apex * progress * (1 - progress) + 0.035 * progress;
+      particleTransform.position.set(
+        intro.seed.x + Math.cos(particle.angle) * travel,
+        0.022 + height,
+        intro.seed.z + Math.sin(particle.angle) * travel,
+      );
+      particleTransform.scale.set(particle.size * 0.72, particle.size * 1.55, particle.size * 0.72);
+      particleTransform.rotation.set(Math.cos(particle.angle) * 0.24, 0, -Math.sin(particle.angle) * 0.24);
+      particleTransform.updateMatrix();
+      mesh.setMatrixAt(index, particleTransform.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <group position={[1.45, -2.8, 0]}>
+      <mesh
+        ref={ripple}
+        geometry={rippleGeometry}
+        material={rippleMaterial}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={0}
+        visible={false}
+        renderOrder={4}
+      />
+      <instancedMesh
+        ref={droplets}
+        args={[dropletGeometry, dropletMaterial, particleLayout.length]}
+        visible={false}
+        frustumCulled={false}
+        renderOrder={5}
+      />
+    </group>
+  );
+}
+
+function createImpactRippleMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uFront: { value: 0 },
+      uOpacity: { value: 0 },
+      uTime: { value: 0 },
+      uInk: { value: new THREE.Color("#10100f") },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uFront;
+      uniform float uOpacity;
+      uniform float uTime;
+      uniform vec3 uInk;
+      varying vec2 vUv;
+
+      void main() {
+        float radius = length(vUv - 0.5) * 2.0;
+        float wavePhase = (radius - uFront) * 72.0 - uTime * 1.7;
+        float radialDisplacement = sin(wavePhase) * 0.014 * exp(-abs(radius - uFront) * 13.0);
+        float waveDistance = abs(radius + radialDisplacement - uFront);
+        float crown = exp(-waveDistance * 58.0);
+        float trailingRing = exp(-abs(radius - uFront + 0.055) * 35.0);
+        float pooledInk = (1.0 - smoothstep(uFront - 0.1, uFront + 0.025, radius)) * 0.12;
+        float paperFade = 1.0 - smoothstep(0.82, 1.0, radius);
+        float alpha = (crown * 0.68 + trailingRing * 0.2 + pooledInk) * paperFade * uOpacity;
+        if (alpha < 0.006) discard;
+        gl_FragColor = vec4(uInk, alpha);
+        #include <colorspace_fragment>
+      }
+    `,
+    side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
 }
 
 function CameraController({
@@ -450,13 +627,10 @@ function CameraController({
 
     // Keep every node hidden until the trunk zoom has reached its target and
     // the camera itself has settled. Nodes become available on later scrolls.
-    const cameraSettled = camera.position.distanceTo(cameraPosition) < 0.045;
-    if (!intro.nodesReady && intro.complete && centered && trunkZoom > 0.985 && cameraSettled) {
-      intro.nodesReady = true;
-      if (!introCompleteNotified.current) {
-        introCompleteNotified.current = true;
-        onIntroComplete();
-      }
+    const cameraSettled = camera.position.distanceTo(cameraPosition) < 0.02;
+    if (!introCompleteNotified.current && intro.complete && centered && trunkZoom > 0.999 && cameraSettled) {
+      introCompleteNotified.current = true;
+      onIntroComplete();
     }
   });
 
@@ -787,6 +961,15 @@ function buildPineGeometry() {
   const structureParts: THREE.BufferGeometry[] = [];
   const canopyParts: THREE.BufferGeometry[] = [];
   const foliageStrokes: BrushStroke[] = [];
+  const nodePositions: Record<string, THREE.Vector3> = {};
+  const rootNodeBySeed: Record<number, string> = { 1: "northbound", 5: "katusa", 8: "georgia-tech" };
+  const canopyNodeBySeed: Record<number, string> = {
+    1: "timeslips",
+    2: "travel-health",
+    3: "neural-vision",
+    4: "bytefight",
+    5: "jobjoe",
+  };
   structureParts.push(makeOrganicTube(trunkSpline, 0.72, trunkRadius, 26, 176, 0.8, 0.12));
   structureParts.push(...makeBarkRidges());
 
@@ -812,6 +995,17 @@ function buildPineGeometry() {
       start.clone().addScaledVector(direction, root.reach).add(new THREE.Vector3(0, root.lift, 0)),
     ], root.seed * 3.7, 0.13);
     structureParts.push(makeOrganicTube(rootCurve, 0.29, rootRadius, 16, 68, root.seed, 0.25));
+    const rootNodeId = rootNodeBySeed[root.seed];
+    if (rootNodeId) {
+      const jointT = 0.68;
+      const tangent = rootCurve.getTangentAt(jointT).normalize();
+      const surfaceNormal = new THREE.Vector3(0, 0, 1)
+        .addScaledVector(tangent, -tangent.z)
+        .normalize();
+      const surfaceRadius = 0.29 * sampleRadius(jointT, rootRadius);
+      nodePositions[rootNodeId] = rootCurve.getPointAt(jointT)
+        .addScaledVector(surfaceNormal, surfaceRadius + 0.055);
+    }
 
     for (const t of [0.42, 0.68, 0.86]) {
       const joint = rootCurve.getPointAt(t);
@@ -870,7 +1064,10 @@ function buildPineGeometry() {
 
     for (const [padIndex, t] of [0.4, 0.68, 0.96].entries()) {
       const padSize = padIndex === 2 ? 0.64 : 0.43;
-      addBrushCluster(foliageStrokes, primaryCurve.getPointAt(t), padSize, limb.seed * 17 + padIndex, padIndex === 2 ? 44 : 28);
+      const padCenter = primaryCurve.getPointAt(t);
+      addBrushCluster(foliageStrokes, padCenter, padSize, limb.seed * 17 + padIndex, padIndex === 2 ? 44 : 28);
+      const projectNodeId = canopyNodeBySeed[limb.seed];
+      if (padIndex === 2 && projectNodeId) nodePositions[projectNodeId] = padCenter.clone();
     }
   });
 
@@ -878,6 +1075,7 @@ function buildPineGeometry() {
     structure: mergeTubeGeometries(structureParts),
     canopy: mergeTubeGeometries(canopyParts),
     foliage: foliageStrokes,
+    nodePositions,
   };
 }
 
@@ -1135,10 +1333,12 @@ function createBrushStrokeMaterial(brushTexture: THREE.Texture) {
 
 function PineTree({
   intro,
+  nodesReady,
   selectedNode,
   onSelectNode,
 }: {
   intro: IntroTimeline;
+  nodesReady: boolean;
   selectedNode: PortfolioNode | null;
   onSelectNode: (node: PortfolioNode | null) => void;
 }) {
@@ -1146,9 +1346,15 @@ function PineTree({
   const rootNodes = useRef<THREE.Group>(null);
   const brushMesh = useRef<THREE.InstancedMesh>(null);
   const matricesReady = useRef(false);
-  const nodes = portfolioNodes;
   const scroll = useScroll();
-  const geometry = useMemo(buildPineGeometry, []);
+  const geometry = useMemo<PineGeometry>(buildPineGeometry, []);
+  const nodes = useMemo<PortfolioNode[]>(() => portfolioNodes.map((node) => {
+    const anchor = geometry.nodePositions[node.id];
+    return {
+      ...node,
+      position: [anchor.x, anchor.y, anchor.z] as [number, number, number],
+    };
+  }), [geometry]);
   const brushTexture = useMemo(createBrushAlphaTexture, []);
   const brushPlane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const brushMaterial = useMemo(() => createBrushStrokeMaterial(brushTexture), [brushTexture]);
@@ -1172,8 +1378,8 @@ function PineTree({
     brushMaterial.uniforms.uProgress.value = intro.progress;
     brushMaterial.uniforms.uFogDensity.value = intro.fogDensity;
     brushMaterial.uniforms.uTime.value = windTime;
-    if (branchNodes.current) branchNodes.current.visible = intro.nodesReady && scroll.offset < 0.37;
-    if (rootNodes.current) rootNodes.current.visible = intro.nodesReady && scroll.offset > 0.63;
+    if (branchNodes.current) branchNodes.current.visible = scroll.offset < 0.37;
+    if (rootNodes.current) rootNodes.current.visible = scroll.offset > 0.63;
 
     if (brushMesh.current && (!matricesReady.current || camera.quaternion.angleTo(previousCameraRotation) > 0.0005)) {
       geometry.foliage.forEach((stroke, index) => {
@@ -1200,26 +1406,30 @@ function PineTree({
         frustumCulled={false}
       />
 
-      <group ref={branchNodes}>
-        {nodes.filter((node) => node.stage === "branches").map((node) => (
-          <GlowNode
-            key={node.id}
-            node={node}
-            active={selectedNode?.id === node.id}
-            onClick={() => onSelectNode(node)}
-          />
-        ))}
-      </group>
-      <group ref={rootNodes}>
-        {nodes.filter((node) => node.stage === "roots").map((node) => (
-          <GlowNode
-            key={node.id}
-            node={node}
-            active={selectedNode?.id === node.id}
-            onClick={() => onSelectNode(node)}
-          />
-        ))}
-      </group>
+      {nodesReady && (
+        <>
+          <group ref={branchNodes} visible={scroll.offset < 0.37}>
+            {nodes.filter((node) => node.stage === "branches").map((node) => (
+              <GlowNode
+                key={node.id}
+                node={node}
+                active={selectedNode?.id === node.id}
+                onClick={() => onSelectNode(node)}
+              />
+            ))}
+          </group>
+          <group ref={rootNodes} visible={scroll.offset > 0.63}>
+            {nodes.filter((node) => node.stage === "roots").map((node) => (
+              <GlowNode
+                key={node.id}
+                node={node}
+                active={selectedNode?.id === node.id}
+                onClick={() => onSelectNode(node)}
+              />
+            ))}
+          </group>
+        </>
+      )}
     </group>
   );
 }
