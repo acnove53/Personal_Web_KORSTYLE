@@ -35,7 +35,7 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--stamp); outline
 
 .paper-grain, .edge-vignette { position: absolute; pointer-events: none; inset: 0; }
 .paper-grain { z-index: 1; opacity: 0.22; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.17'/%3E%3C/svg%3E"); }
-.edge-vignette { z-index: 2; background: linear-gradient(90deg, rgba(249,248,246,.62), transparent 35%, transparent 75%, rgba(249,248,246,.2)), linear-gradient(0deg, rgba(249,248,246,.85), transparent 16%, transparent 84%, rgba(249,248,246,.45)); transition: opacity .8s ease; }
+.edge-vignette { z-index: 2; background: linear-gradient(90deg, rgba(249,248,246,.4), transparent 35%, transparent 75%, rgba(249,248,246,.2)), linear-gradient(0deg, rgba(249,248,246,.6), transparent 16%, transparent 84%, rgba(249,248,246,.3)); transition: opacity .8s ease; }
 
 .site-header, .site-footer, .stage-index, .chapter-intro, .scene-caption, .scroll-cue, .detail-card { z-index: 4; position: absolute; }
 .site-header, .site-footer, .stage-index, .chapter-intro, .scene-caption, .scroll-cue { pointer-events: none; }

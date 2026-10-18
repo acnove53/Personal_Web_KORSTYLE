@@ -191,7 +191,7 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
 
   return (
     <Canvas
-      camera={{ position: [1.48, 1.05, 14.2], fov: 38, near: 0.1, far: 80 }}
+      camera={{ position: [1.48, 1.05, 14.2], fov: 38, near: 0.1, far: 180 }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
       performance={{ min: 0.6 }}
@@ -224,6 +224,7 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
           onSelectNode={onSelectNode}
           onConnectScroll={handleScrollConnect}
         />
+        <MountainLayers />
         <PineTree intro={intro} nodesReady={nodesReady} selectedNode={selectedNode} onSelectNode={onSelectNode} />
       </ScrollControls>
     </Canvas>
@@ -383,7 +384,7 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     if (intro.phase === "sprout" || intro.phase === "complete") {
       if (intro.phase === "sprout") intro.elapsed += Math.min(delta, 0.05);
       const fogClear = smoothStep(0, 1.05, intro.elapsed);
-      fog.density = THREE.MathUtils.lerp(0.24, 0.008, fogClear);
+      fog.density = THREE.MathUtils.lerp(0.24, 0.011, fogClear);
       intro.fogDensity = fog.density;
       intro.progress = smoothStep(0, 2.65, intro.elapsed);
       intro.complete = intro.progress >= 1;
@@ -875,10 +876,91 @@ function CameraController({
   return null;
 }
 
+type MountainLayerSpec = {
+  id: string;
+  z: number;
+  width: number;
+  height: number;
+  baseY: number;
+  follow: number;
+  opacity: number;
+  softness: number;
+  color: string;
+  seed: number;
+};
+
+const mountainLayerSpecs: MountainLayerSpec[] = [
+  {
+    id: "near", z: -48, width: 88, height: 9.5, baseY: -13.8,
+    follow: 0.82, opacity: 0.48, softness: 0.12, color: "#77736c", seed: 17,
+  },
+  {
+    id: "middle", z: -84, width: 142, height: 14, baseY: -23.5,
+    follow: 0.86, opacity: 0.38, softness: 0.34, color: "#928f89", seed: 43,
+  },
+  {
+    id: "far", z: -124, width: 208, height: 20, baseY: -36.5,
+    follow: 0.9, opacity: 0.3, softness: 0.58, color: "#aeaca6", seed: 89,
+  },
+];
+
+function MountainLayers() {
+  const layerRefs = useRef<(THREE.Group | null)[]>([]);
+  const layers = useMemo(() => mountainLayerSpecs.map((spec) => {
+    const washTexture = createMountainWashTexture(spec.seed + 307, spec.softness);
+    return {
+      ...spec,
+      geometry: buildMountainGeometry(spec),
+      washTexture,
+      material: new THREE.MeshBasicMaterial({
+        color: "#ffffff",
+        opacity: 1,
+        transparent: true,
+        vertexColors: true,
+        alphaMap: washTexture,
+        depthWrite: false,
+        fog: false,
+        side: THREE.DoubleSide,
+      }),
+    };
+  }), []);
+
+  useEffect(() => () => {
+    layers.forEach(({ geometry, material, washTexture }) => {
+      geometry.dispose();
+      washTexture.dispose();
+      material.dispose();
+    });
+  }, [layers]);
+
+  useFrame(({ camera }) => {
+    layers.forEach((layer, index) => {
+      const group = layerRefs.current[index];
+      if (!group) return;
+      group.position.x = 1.45 + (camera.position.x - 1.48) * layer.follow;
+      group.position.y = layer.baseY + camera.position.y * layer.follow;
+    });
+  });
+
+  return (
+    <group>
+      {layers.map((layer, index) => (
+        <group
+          key={layer.id}
+          ref={(group) => { layerRefs.current[index] = group; }}
+          position={[1.45, layer.baseY + 1.05 * layer.follow, layer.z]}
+        >
+          <mesh geometry={layer.geometry} material={layer.material} frustumCulled={false} raycast={() => {}} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
 type RadiusStop = readonly [number, number];
 
 const trunkRadius: RadiusStop[] = [
-  [0, 1.12], [0.12, 1.04], [0.3, 0.86], [0.53, 0.67], [0.72, 0.48], [0.9, 0.25], [1, 0.025],
+  [0, 1.12], [0.12, 1.04], [0.3, 0.86], [0.53, 0.67], [0.72, 0.48], [0.9, 0.25], [1, 0.008],
 ];
 const branchRadius: RadiusStop[] = [[0, 1.15], [0.18, 1], [0.48, 0.72], [0.76, 0.4], [0.94, 0.16], [1, 0.035]];
 const twigRadius: RadiusStop[] = [[0, 1.05], [0.24, 0.86], [0.62, 0.55], [0.9, 0.22], [1, 0.04]];
@@ -899,7 +981,9 @@ const trunkAnchors = [
   new THREE.Vector3(0.6, 6.7, 0.32),
   new THREE.Vector3(0.48, 7.36, 0.22),
   new THREE.Vector3(-0.12, 8.02, -0.12),
-  new THREE.Vector3(-0.42, 8.78, -0.2),
+  new THREE.Vector3(0.03, 8.34, -0.2),
+  new THREE.Vector3(0.32, 8.62, -0.18),
+  new THREE.Vector3(0.42, 8.96, -0.12),
 ];
 
 const canopyLimbs = [
@@ -975,7 +1059,7 @@ function makeOrganicTube(
       );
       uvs.push(u, t);
       washes.push(wash + 0.07 * Math.sin(t * 14 + seed) + 0.035 * Math.cos(angle * 4 + seed));
-      roughness.push(baseRadius);
+      roughness.push(radius);
     }
   }
 
@@ -1059,6 +1143,128 @@ function trunkCenterAt(y: number) {
 function seedUnit(seed: number, index: number) {
   const value = Math.sin(seed * 127.1 + index * 311.7) * 43758.5453;
   return value - Math.floor(value);
+}
+
+function buildMountainGeometry(layer: MountainLayerSpec) {
+  const horizontalSegments = 144;
+  const verticalSegments = 18;
+  const peakCount = Math.round(7 - layer.softness * 3.4);
+  const peaks = Array.from({ length: peakCount }, (_, index) => ({
+    center: (index + 0.5 + (seedUnit(layer.seed, index) - 0.5) * 0.55) / peakCount,
+    height: layer.height * (0.42 + seedUnit(layer.seed, index + 31) * 0.55),
+    leftWidth: 0.052 + seedUnit(layer.seed, index + 67) * 0.075 + layer.softness * 0.025,
+    rightWidth: 0.06 + seedUnit(layer.seed, index + 97) * 0.092 + layer.softness * 0.034,
+  }));
+  const ridgeHeights: number[] = [];
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  const ink = new THREE.Color(layer.color);
+  const rowSize = verticalSegments + 1;
+
+  for (let column = 0; column <= horizontalSegments; column++) {
+    const u = column / horizontalSegments;
+    let ridgeHeight = layer.height * 0.025;
+
+    for (const peak of peaks) {
+      const offset = u - peak.center;
+      const width = offset < 0 ? peak.leftWidth : peak.rightWidth;
+      const distance = Math.abs(offset) / width;
+      const mountainFace = Math.pow(Math.max(0, 1 - distance), 1.08 - layer.softness * 0.42);
+      const shoulder = Math.exp(-Math.pow(distance - 0.72, 2) / 0.12) * 0.07;
+      ridgeHeight = Math.max(ridgeHeight, peak.height * (0.025 + mountainFace * 0.91 + shoulder));
+    }
+
+    const edgeFade = Math.min(smoothStep(0, 0.035, u), smoothStep(0, 0.035, 1 - u));
+    const contourNoise = 0.94
+      + 0.025 * Math.sin(u * (38 - layer.softness * 15) + layer.seed)
+      + 0.018 * Math.sin(u * 83 + layer.seed * 0.37)
+      + seedUnit(layer.seed, column + 211) * 0.025 * (1 - layer.softness);
+    ridgeHeights.push(ridgeHeight * edgeFade * contourNoise);
+  }
+
+  for (let column = 0; column <= horizontalSegments; column++) {
+    const u = column / horizontalSegments;
+    const x = (u - 0.5) * layer.width;
+    const ridgeHeight = ridgeHeights[column];
+    const cloudLine = 0.16 + 0.045 * Math.sin(u * 16 + layer.seed) + 0.025 * Math.sin(u * 37 + layer.seed * 0.4);
+
+    for (let row = 0; row <= verticalSegments; row++) {
+      const v = row / verticalSegments;
+      positions.push(x, ridgeHeight * v, 0);
+      uvs.push(u, v);
+
+      const cloudFade = smoothStep(0.015, 0.09, v);
+      const mistBand = Math.exp(-Math.pow((v - cloudLine) / 0.105, 2));
+      const grain = 0.88 + seedUnit(layer.seed, column * 23 + row * 41) * 0.12 * (1 - layer.softness);
+      const pigment = 0.9 + seedUnit(layer.seed, column * 17 + row * 29 + 503) * 0.1;
+      const summitFeather = 1 - layer.softness * 0.32 * smoothStep(0.84, 1, v);
+      colors.push(
+        ink.r * pigment,
+        ink.g * pigment,
+        ink.b * pigment,
+        layer.opacity * cloudFade * (1 - mistBand * 0.32) * grain * summitFeather,
+      );
+    }
+  }
+
+  for (let column = 0; column < horizontalSegments; column++) {
+    for (let row = 0; row < verticalSegments; row++) {
+      const a = column * rowSize + row;
+      const b = (column + 1) * rowSize + row;
+      const c = (column + 1) * rowSize + row + 1;
+      const d = column * rowSize + row + 1;
+      indices.push(a, b, c, a, c, d);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 4));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createMountainWashTexture(seed: number, softness: number) {
+  const width = 384;
+  const height = 192;
+  const pixels = new Uint8Array(width * height * 4);
+
+  for (let y = 0; y < height; y++) {
+    const v = y / (height - 1);
+    for (let x = 0; x < width; x++) {
+      const u = x / (width - 1);
+      const noise = seedUnit(seed + x * 0.31, y * 0.53 + 11);
+      const cloudCenter = 0.17 + 0.055 * Math.sin(u * 15 + seed) + 0.028 * Math.sin(u * 31 + seed * 0.6);
+      const cloud = Math.exp(-Math.pow((v - cloudCenter) / 0.095, 2));
+      const streak = Math.sin(u * 112 + Math.sin(v * 29 + seed) * 2.1 + seed * 0.4) * 0.5 + 0.5;
+      const dryBrush = smoothStep(0.9, 0.99, streak)
+        * smoothStep(0.22, 0.42, v)
+        * (1 - smoothStep(0.76, 0.94, v));
+      const grain = 0.83 + noise * 0.17 * (1 - softness * 0.55);
+      const baseWash = 0.88 + smoothStep(0.015, 0.3, v) * 0.12;
+      const alpha = THREE.MathUtils.clamp((grain - cloud * 0.34 - dryBrush * 0.3) * baseWash, 0.3, 1);
+      const pixel = (y * width + x) * 4;
+      pixels[pixel] = 255;
+      pixels[pixel + 1] = Math.round(alpha * 255);
+      pixels[pixel + 2] = 255;
+      pixels[pixel + 3] = 255;
+    }
+  }
+
+  const texture = new THREE.DataTexture(pixels, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function weatheredCurve(points: THREE.Vector3[], seed: number, amplitude: number) {
@@ -1164,6 +1370,14 @@ function makeBarkRidges() {
     { start: 0.62, end: 0.84, angle: 0.34, seed: 9, width: 0.016 },
     { start: 0.73, end: 0.96, angle: -0.72, seed: 10, width: 0.018 },
     { start: 0.81, end: 0.99, angle: -0.2, seed: 11, width: 0.013 },
+    { start: 0.08, end: 0.24, angle: 0.68, seed: 12, width: 0.03 },
+    { start: 0.17, end: 0.36, angle: 1.12, seed: 13, width: 0.034 },
+    { start: 0.27, end: 0.46, angle: -0.08, seed: 14, width: 0.028 },
+    { start: 0.37, end: 0.56, angle: 0.52, seed: 15, width: 0.032 },
+    { start: 0.48, end: 0.68, angle: 0.71, seed: 16, width: 0.035 },
+    { start: 0.59, end: 0.77, angle: 0.18, seed: 17, width: 0.03 },
+    { start: 0.69, end: 0.88, angle: 0.96, seed: 18, width: 0.032 },
+    { start: 0.83, end: 0.98, angle: 0.42, seed: 19, width: 0.028 },
   ];
   const ridges: THREE.BufferGeometry[] = [];
 
@@ -1273,7 +1487,8 @@ function buildPineGeometry() {
       trunkPoint.clone().addScaledVector(direction, limb.reach).add(new THREE.Vector3(-sway, limb.lift, depth * 0.7)),
     ], limb.seed * 4.1, 0.16);
     const tier = Math.max(0, (8.1 - limb.y) * 0.012);
-    canopyParts.push(makeOrganicTube(primaryCurve, 0.16 - tier, branchRadius, 12, 56, limb.seed, 0.22 + tier));
+    const upperBranch = limb.y >= 7.02;
+    canopyParts.push(makeOrganicTube(primaryCurve, (upperBranch ? 0.13 : 0.16) - tier, branchRadius, 12, 56, limb.seed, 0.22 + tier));
 
     const twigLocations = limb.seed % 2 === 0 ? [0.29, 0.53, 0.83] : [0.38, 0.56, 0.72, 0.91];
     for (const [twigIndex, t] of twigLocations.entries()) {
@@ -1286,7 +1501,7 @@ function buildPineGeometry() {
         base.clone().add(new THREE.Vector3(limb.side * twigReach * 0.63, 0.38 + limb.lift * 0.16, depth * 0.45 + twigSide * 0.16)),
         base.clone().add(new THREE.Vector3(limb.side * twigReach, 0.32 + limb.lift * 0.2, depth * 0.62 + twigSide * 0.2)),
       ], limb.seed * 7 + twigIndex, 0.085);
-      canopyParts.push(makeOrganicTube(twigCurve, 0.046, twigRadius, 8, 24, limb.seed + twigIndex, 0.34));
+      canopyParts.push(makeOrganicTube(twigCurve, upperBranch ? 0.034 : 0.046, twigRadius, 8, 24, limb.seed + twigIndex, 0.34));
       addBrushCluster(foliageStrokes, twigCurve.getPointAt(1), 0.42 + (twigIndex % 2) * 0.08, limb.seed * 7 + twigIndex, 22);
 
       const forkBase = twigCurve.getPointAt(0.58);
@@ -1296,14 +1511,16 @@ function buildPineGeometry() {
         forkBase.clone().add(new THREE.Vector3(limb.side * 0.22, 0.29, twigSide * 0.11)),
         forkBase.clone().add(new THREE.Vector3(limb.side * 0.31, 0.34, twigSide * 0.16)),
       ], limb.seed * 13 + twigIndex, 0.07);
-      canopyParts.push(makeOrganicTube(forkCurve, 0.024, twigRadius, 7, 16, limb.seed + twigIndex * 2, 0.4));
+      canopyParts.push(makeOrganicTube(forkCurve, upperBranch ? 0.018 : 0.024, twigRadius, 7, 16, limb.seed + twigIndex * 2, 0.4));
       if (twigIndex % 2 === 0) addBrushCluster(foliageStrokes, forkCurve.getPointAt(1), 0.29, limb.seed * 11 + twigIndex, 14);
     }
 
     for (const [padIndex, t] of [0.4, 0.68, 0.96].entries()) {
-      const padSize = padIndex === 2 ? 0.64 : 0.43;
+      const upperTerminalPad = upperBranch && padIndex === 2;
+      const padSize = padIndex === 2 ? (upperTerminalPad ? 0.42 : 0.64) : 0.43;
       const padCenter = primaryCurve.getPointAt(t);
-      addBrushCluster(foliageStrokes, padCenter, padSize, limb.seed * 17 + padIndex, padIndex === 2 ? 44 : 28);
+      const padDensity = upperTerminalPad ? 28 : padIndex === 2 ? 44 : 28;
+      addBrushCluster(foliageStrokes, padCenter, padSize, limb.seed * 17 + padIndex, padDensity);
       const projectNodeId = canopyNodeBySeed[limb.seed];
       if (padIndex === 2 && projectNodeId) nodePositions[projectNodeId] = padCenter.clone();
     }
