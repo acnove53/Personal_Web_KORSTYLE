@@ -45,10 +45,13 @@ type IntroTimeline = {
   phase: "title" | "seed" | "drop" | "splash" | "sprout" | "complete";
   splash: {
     active: boolean;
+    puddleScale: number;
     rippleScale: number;
     rippleFront: number;
     rippleOpacity: number;
     puddleOpacity: number;
+    crownProgress: number;
+    crownOpacity: number;
     dropletProgress: number;
     dropletOpacity: number;
   };
@@ -173,10 +176,13 @@ export function PineScene({ onStageChange, onSelectNode, selectedNode, onConnect
     phase: "title",
     splash: {
       active: false,
+      puddleScale: 0,
       rippleScale: 0,
       rippleFront: 0,
       rippleOpacity: 0,
       puddleOpacity: 0,
+      crownProgress: 0,
+      crownOpacity: 0,
       dropletProgress: 0,
       dropletOpacity: 0,
     },
@@ -239,10 +245,13 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     intro.phase = "title";
     Object.assign(intro.splash, {
       active: false,
+      puddleScale: 0,
       rippleScale: 0,
       rippleFront: 0,
       rippleOpacity: 0,
       puddleOpacity: 0,
+      crownProgress: 0,
+      crownOpacity: 0,
       dropletProgress: 0,
       dropletOpacity: 0,
     });
@@ -279,10 +288,13 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
       intro.phase = "splash";
       Object.assign(intro.splash, {
         active: true,
+        puddleScale: 0,
         rippleScale: 0,
         rippleFront: 0,
         rippleOpacity: 1,
         puddleOpacity: 1,
+        crownProgress: 0,
+        crownOpacity: 1,
         dropletProgress: 0,
         dropletOpacity: 1,
       });
@@ -302,17 +314,27 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
       onComplete: () => { intro.seed.visible = false; },
     }, "impact+=0.025");
     timeline.to(intro.splash, {
-      rippleScale: 18,
-      rippleFront: 1,
-      duration: 0.5,
+      puddleScale: 2.15,
+      duration: 0.3,
       ease: "expo.out",
     }, "impact");
     timeline.to(intro.splash, {
-      dropletProgress: 1,
-      duration: 0.95,
+      rippleScale: 3.6,
+      rippleFront: 1,
+      duration: 0.78,
+      ease: "power2.out",
+    }, "impact");
+    timeline.to(intro.splash, {
+      crownProgress: 1,
+      duration: 1.02,
       ease: "none",
     }, "impact");
-    timeline.addLabel("puddle-rest", "impact+=0.5");
+    timeline.to(intro.splash, {
+      dropletProgress: 1,
+      duration: 1.1,
+      ease: "none",
+    }, "impact");
+    timeline.addLabel("puddle-rest", "impact+=0.78");
     timeline.to({}, { duration: 0.2 }, "puddle-rest");
     timeline.to(intro.splash, {
       rippleOpacity: 0,
@@ -331,7 +353,12 @@ function IntroSequence({ intro, titleRef }: { intro: IntroTimeline; titleRef: { 
     }, "puddle-rest+=0.2");
     timeline.to(intro.splash, {
       puddleOpacity: 0,
-      duration: 0.34,
+      duration: 0.32,
+      ease: "power1.out",
+    }, "puddle-rest+=0.2");
+    timeline.to(intro.splash, {
+      crownOpacity: 0,
+      duration: 0.28,
       ease: "power1.out",
     }, "puddle-rest+=0.2");
     timeline.eventCallback("onComplete", () => {
@@ -419,12 +446,15 @@ function SeedParticle({ intro }: { intro: IntroTimeline }) {
 }
 
 function ImpactSplash({ intro }: { intro: IntroTimeline }) {
+  const crown = useRef<THREE.Mesh>(null);
   const puddle = useRef<THREE.Mesh>(null);
   const ripple = useRef<THREE.Mesh>(null);
   const droplets = useRef<THREE.InstancedMesh>(null);
+  const crownGeometry = useMemo(() => createCrownSheetGeometry(96), []);
   const puddleGeometry = useMemo(() => createInkPuddleGeometry(), []);
   const rippleGeometry = useMemo(() => new THREE.CircleGeometry(1, 96), []);
   const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
+  const crownMaterial = useMemo(() => createCrownMaterial(), []);
   const puddleMaterial = useMemo(() => new THREE.MeshBasicMaterial({
     color: "#000000",
     transparent: true,
@@ -444,28 +474,60 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
     fog: false,
   }), []);
   const particleTransform = useMemo(() => new THREE.Object3D(), []);
-  const particleLayout = useMemo(() => Array.from({ length: 48 }, (_, index) => ({
-    angle: (index / 48) * Math.PI * 2 + (seedUnit(23, index) - 0.5) * 0.24,
-    reach: 1.25 + seedUnit(41, index) * 1.6,
-    apex: 2.2 + seedUnit(59, index) * 0.8,
-    size: 0.038 + seedUnit(71, index) * 0.045,
+  const particleLayout = useMemo(() => Array.from({ length: 64 }, (_, index) => ({
+    angle: seedUnit(23, index) * Math.PI * 2,
+    reach: 0.72 + seedUnit(41, index) * 1.3,
+    apex: 2 + seedUnit(59, index) * 0.8,
+    flightTime: 0.72 + seedUnit(67, index) * 0.46,
+    size: 0.04 + seedUnit(71, index) * 0.05,
   })), []);
 
   useEffect(() => () => {
+    crownGeometry.dispose();
     puddleGeometry.dispose();
     rippleGeometry.dispose();
     dropletGeometry.dispose();
+    crownMaterial.dispose();
     puddleMaterial.dispose();
     rippleMaterial.dispose();
     dropletMaterial.dispose();
-  }, [dropletGeometry, dropletMaterial, puddleGeometry, puddleMaterial, rippleGeometry, rippleMaterial]);
+  }, [crownGeometry, crownMaterial, dropletGeometry, dropletMaterial, puddleGeometry, puddleMaterial, rippleGeometry, rippleMaterial]);
 
   useFrame(({ clock }) => {
     const splash = intro.splash;
+    if (crown.current) {
+      const progress = THREE.MathUtils.clamp(splash.crownProgress, 0, 1);
+      const rise = progress < 0.2
+        ? smoothStep(0, 0.2, progress)
+        : 1 - smoothStep(0.2, 1, progress);
+      const expansion = smoothStep(0, 0.22, progress);
+      const positions = crownGeometry.getAttribute("position") as THREE.BufferAttribute;
+      const segments = positions.count / 3;
+      for (let ring = 0; ring < 3; ring++) {
+        for (let segment = 0; segment < segments; segment++) {
+          const angle = (segment / segments) * Math.PI * 2;
+          const rippleNoise = Math.sin(angle * 7 + 0.5) * 0.045 + Math.cos(angle * 13 - 0.8) * 0.022;
+          const jet = Math.pow(Math.max(0, Math.cos(angle * 9 + Math.sin(angle * 3) * 0.35)), 18);
+          const baseRadius = 0.22 + expansion * 0.68;
+          const ringRadius = ring === 0 ? baseRadius * 0.28 : ring === 1 ? baseRadius * 0.69 : baseRadius * (1 + rippleNoise);
+          const sheetHeight = ring === 0
+            ? 0.025
+            : ring === 1
+              ? rise * (0.3 + rippleNoise * 0.35)
+              : rise * (0.62 + jet * 0.44 + rippleNoise);
+          const index = ring * segments + segment;
+          positions.setXYZ(index, Math.cos(angle) * ringRadius, 0.022 + sheetHeight, Math.sin(angle) * ringRadius);
+        }
+      }
+      positions.needsUpdate = true;
+      crownGeometry.computeVertexNormals();
+      crown.current.visible = splash.active && splash.crownOpacity > 0.002;
+      crownMaterial.uniforms.uOpacity.value = splash.crownOpacity;
+    }
     if (puddle.current) {
       puddle.current.visible = splash.active && splash.puddleOpacity > 0.002;
       puddle.current.position.set(intro.seed.x, 0.009, intro.seed.z);
-      puddle.current.scale.setScalar(splash.rippleScale);
+      puddle.current.scale.setScalar(splash.puddleScale);
       puddleMaterial.opacity = splash.puddleOpacity;
     }
     if (ripple.current) {
@@ -481,16 +543,18 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
     if (!mesh) return;
     mesh.visible = splash.active && splash.dropletOpacity > 0.002;
     dropletMaterial.opacity = splash.dropletOpacity;
-    const progress = THREE.MathUtils.clamp(splash.dropletProgress, 0, 1);
+    const elapsed = THREE.MathUtils.clamp(splash.dropletProgress, 0, 1) * 1.1;
     particleLayout.forEach((particle, index) => {
-      const travel = progress * particle.reach;
-      const height = 4 * particle.apex * progress * (1 - progress) + 0.035 * progress;
+      const particleProgress = THREE.MathUtils.clamp(elapsed / particle.flightTime, 0, 1);
+      const travel = particleProgress * particle.reach;
+      const height = 4 * particle.apex * particleProgress * (1 - particleProgress);
+      const landingScale = 1 - smoothStep(0.82, 1, particleProgress);
       particleTransform.position.set(
         intro.seed.x + Math.cos(particle.angle) * travel,
         0.022 + height,
         intro.seed.z + Math.sin(particle.angle) * travel,
       );
-      particleTransform.scale.set(particle.size * 0.72, particle.size * 1.55, particle.size * 0.72);
+      particleTransform.scale.set(particle.size * 0.72, particle.size * 1.55 * landingScale, particle.size * 0.72);
       particleTransform.rotation.set(Math.cos(particle.angle) * 0.24, 0, -Math.sin(particle.angle) * 0.24);
       particleTransform.updateMatrix();
       mesh.setMatrixAt(index, particleTransform.matrix);
@@ -500,6 +564,14 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
 
   return (
     <group position={[1.45, -2.8, 0]}>
+      <mesh
+        ref={crown}
+        geometry={crownGeometry}
+        material={crownMaterial}
+        visible={false}
+        frustumCulled={false}
+        renderOrder={5}
+      />
       <mesh
         ref={puddle}
         geometry={puddleGeometry}
@@ -523,10 +595,73 @@ function ImpactSplash({ intro }: { intro: IntroTimeline }) {
         args={[dropletGeometry, dropletMaterial, particleLayout.length]}
         visible={false}
         frustumCulled={false}
-        renderOrder={5}
+        renderOrder={6}
       />
     </group>
   );
+}
+
+function createCrownSheetGeometry(segments: number) {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const radii = [0.28, 0.68, 0.98];
+
+  for (let ring = 0; ring < 3; ring++) {
+    for (let segment = 0; segment < segments; segment++) {
+      const angle = (segment / segments) * Math.PI * 2;
+      positions.push(Math.cos(angle) * radii[ring], 0.022, Math.sin(angle) * radii[ring]);
+      uvs.push(segment / segments, ring / 2);
+    }
+  }
+
+  for (let ring = 0; ring < 2; ring++) {
+    for (let segment = 0; segment < segments; segment++) {
+      const next = (segment + 1) % segments;
+      const a = ring * segments + segment;
+      const b = ring * segments + next;
+      const c = (ring + 1) * segments + segment;
+      const d = (ring + 1) * segments + next;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createCrownMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uOpacity: { value: 0 } },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        float ribs = pow(max(0.0, sin(vUv.x * 6.2831853 * 9.0 + 0.7)), 16.0);
+        float wetEdge = smoothstep(0.72, 1.0, vUv.y);
+        vec3 ink = mix(vec3(0.012), vec3(0.052), vUv.y * 0.7);
+        ink = mix(ink, vec3(0.14), ribs * wetEdge * 0.42);
+        gl_FragColor = vec4(ink, uOpacity);
+        #include <colorspace_fragment>
+      }
+    `,
+    side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    fog: false,
+  });
 }
 
 function createInkPuddleGeometry() {
@@ -574,13 +709,12 @@ function createImpactRippleMaterial() {
       void main() {
         float radius = length(vUv - 0.5) * 2.0;
         float wavePhase = (radius - uFront) * 72.0 - uTime * 1.7;
-        float radialDisplacement = sin(wavePhase) * 0.014 * exp(-abs(radius - uFront) * 13.0);
+        float radialDisplacement = sin(wavePhase) * 0.018 * exp(-abs(radius - uFront) * 11.0);
         float waveDistance = abs(radius + radialDisplacement - uFront);
-        float crown = exp(-waveDistance * 58.0);
-        float trailingRing = exp(-abs(radius - uFront + 0.055) * 35.0);
-        float pooledInk = (1.0 - smoothstep(uFront - 0.1, uFront + 0.025, radius));
-        float paperFade = 1.0 - smoothstep(0.82, 1.0, radius);
-        float alpha = (crown * 0.68 + trailingRing * 0.2 + pooledInk) * paperFade * uOpacity;
+        float crown = exp(-waveDistance * 92.0);
+        float trailingRing = exp(-abs(radius - uFront + 0.065) * 44.0);
+        float paperFade = 1.0 - smoothstep(0.96, 1.0, radius);
+        float alpha = (crown * 0.88 + trailingRing * 0.3) * paperFade * uOpacity;
         if (alpha < 0.006) discard;
         gl_FragColor = vec4(uInk, alpha);
         #include <colorspace_fragment>
