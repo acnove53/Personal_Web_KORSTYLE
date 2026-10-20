@@ -7,7 +7,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { StageName } from "@/content/portfolio";
 import { CameraController } from "@/components/scene/camera-controller";
 import { createIntroTimeline, ImpactSplash, IntroSequence, SeedParticle } from "@/components/scene/intro";
-import { MountainLayers } from "@/components/scene/mountains";
+import { InkLandscape } from "@/components/scene/landscape";
 import { PineTree } from "@/components/scene/pine-tree";
 import type { PortfolioNode } from "@/components/scene/types";
 
@@ -81,7 +81,7 @@ export function PineScene({
           onConnectScroll={onConnectScroll}
           reducedMotion={reducedMotion}
         />
-        <MountainLayers />
+        <InkLandscape intro={intro} reducedMotion={reducedMotion} />
         <PineTree intro={intro} nodesReady={nodesReady} selectedNode={selectedNode} onSelectNode={onSelectNode} />
       </ScrollControls>
     </Canvas>

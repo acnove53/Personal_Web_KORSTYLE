@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-const noiseGlsl = /* glsl */ `
+export const noiseGlsl = /* glsl */ `
 float hash31(vec3 p) {
   p = fract(p * 0.1031);
   p += dot(p, p.yzx + 33.33);
