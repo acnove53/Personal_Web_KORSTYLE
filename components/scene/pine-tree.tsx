@@ -64,6 +64,7 @@ export function PineTree({
   const scroll = useScroll();
   const structureMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.5, noiseStrength: 0.55, windStrength: 0 }), []);
   const canopyMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.56, noiseStrength: 0.38, windStrength: 1 }), []);
+  const cliffMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.3, noiseStrength: 0.4, windStrength: 0 }), []);
   const needleAtlas = useMemo(() => paintNeedleAtlas(), []);
   const washTexture = useMemo(() => paintWashCloud(), []);
   const needleMesh = useMemo(
@@ -79,8 +80,10 @@ export function PineTree({
   useEffect(() => () => {
     geometry.structure.dispose();
     geometry.canopy.dispose();
+    geometry.cliff.dispose();
     structureMaterial.dispose();
     canopyMaterial.dispose();
+    cliffMaterial.dispose();
     needleAtlas.dispose();
     washTexture.dispose();
     for (const mesh of [needleMesh, washMesh]) {
@@ -88,15 +91,17 @@ export function PineTree({
       (mesh.material as THREE.Material).dispose();
       mesh.dispose();
     }
-  }, [canopyMaterial, geometry, needleAtlas, needleMesh, structureMaterial, washMesh, washTexture]);
+  }, [canopyMaterial, cliffMaterial, geometry, needleAtlas, needleMesh, structureMaterial, washMesh, washTexture]);
 
   useFrame(({ clock }) => {
     const windTime = clock.elapsedTime;
-    for (const material of [structureMaterial, canopyMaterial, ...foliageMaterials]) {
+    for (const material of [structureMaterial, canopyMaterial, cliffMaterial, ...foliageMaterials]) {
       material.uniforms.uProgress.value = intro.progress;
       material.uniforms.uFogDensity.value = intro.fogDensity;
       material.uniforms.uTime.value = windTime;
     }
+    // The cliff belongs to the landscape: it inks in with the background, after the tree is drawn.
+    cliffMaterial.uniforms.uReveal.value = intro.backgroundReveal;
     // Dots are mounted only for the chapter in view: drei's Html labels ignore a hidden parent group.
     const nodeStage = scroll.offset < 0.37 ? "branches" : scroll.offset > 0.63 ? "roots" : null;
     if (nodeStage !== shownNodeStage.current) {
@@ -109,6 +114,7 @@ export function PineTree({
     <group position={[1.45, -2.8, 0]}>
       <mesh geometry={geometry.structure} material={structureMaterial} />
       <mesh geometry={geometry.canopy} material={canopyMaterial} />
+      <mesh geometry={geometry.cliff} material={cliffMaterial} />
       <primitive object={washMesh} />
       <primitive object={needleMesh} />
 

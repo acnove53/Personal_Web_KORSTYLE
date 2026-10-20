@@ -13,6 +13,7 @@ export type FoliageSprite = {
 export type PineGeometry = {
   structure: THREE.BufferGeometry;
   canopy: THREE.BufferGeometry;
+  cliff: THREE.BufferGeometry;
   needles: FoliageSprite[];
   washes: FoliageSprite[];
   nodePositions: Record<string, THREE.Vector3>;
@@ -340,6 +341,52 @@ function makeRock() {
   return geometry;
 }
 
+// The cliff top the pine stands on: a craggy block whose upper surface sits just under the roots and
+// whose face drops away into mist, so the tree reads as standing on a peak above the far ranges.
+function makeCliff() {
+  const center = new THREE.Vector3(0.4, 0, -0.55);
+  const radiusX = 5.6;
+  const radiusZ = 2.6;
+  const geometry = new THREE.SphereGeometry(1, 120, 72);
+  const position = geometry.getAttribute("position");
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    const angle = Math.atan2(z, x);
+    // An irregular outcrop, not a rectangle: the outline wanders with the angle around the top.
+    const footprint = 1 + (valueNoise3(131, Math.cos(angle) * 1.4, Math.sin(angle) * 1.4, 0) - 0.5) * 0.4;
+    let spread: number;
+    let height: number;
+    if (y >= 0) {
+      // The top: flat under the roots, rolling off at a rounded, broken edge.
+      const across = Math.sqrt(x * x + z * z);
+      const roll = Math.max(0, across - 0.62) / 0.38;
+      spread = across * footprint;
+      height = -0.05 - roll * roll * 0.95 - valueNoise3(139, x * 4, 0, z * 4) * 0.06;
+    } else {
+      // The face: drops away below the edge, stepping out and in over ledges.
+      const ledge = valueNoise3(137, Math.cos(angle) * 2.2, y * 5, Math.sin(angle) * 2.2) - 0.5;
+      spread = footprint * (1 + -y * 0.16 + ledge * 0.12);
+      height = -1.0 + y * 6.2;
+    }
+    position.setXYZ(i, center.x + Math.cos(angle) * spread * radiusX, height, center.z + Math.sin(angle) * spread * radiusZ);
+  }
+  geometry.computeVertexNormals();
+  const count = position.count;
+  const constant = (value: number) => new THREE.Float32BufferAttribute(new Array(count).fill(value), 1);
+  // aBark of -2 marks the cliff: painted like rock, exempt from the ground cut, fading into mist below.
+  geometry.setAttribute("aWash", constant(0.12));
+  geometry.setAttribute("aRoughness", constant(0.16));
+  geometry.setAttribute("aBark", constant(-2));
+  geometry.setAttribute("aCellsAround", constant(4));
+  geometry.setAttribute("aCellsAlong", constant(4));
+  geometry.setAttribute("aFade", constant(1));
+  geometry.setAttribute("aGroove", constant(0));
+  geometry.setAttribute("aTwist", constant(0));
+  return geometry;
+}
+
 export function buildPineGeometry() {
   const structureParts: THREE.BufferGeometry[] = [];
   const canopyParts: THREE.BufferGeometry[] = [];
@@ -497,6 +544,7 @@ export function buildPineGeometry() {
   return {
     structure: mergeTubeGeometries(structureParts),
     canopy: mergeTubeGeometries(canopyParts),
+    cliff: makeCliff(),
     needles,
     washes,
     nodePositions,

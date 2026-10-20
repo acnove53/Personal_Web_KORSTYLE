@@ -19,6 +19,7 @@ const stageOrder: { stage: StageName; label: string }[] = [
 ];
 
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+const introTitle = "A Study in Systems";
 
 function subscribeReducedMotion(onChange: () => void) {
   const query = window.matchMedia(reducedMotionQuery);
@@ -229,7 +230,19 @@ export function PinePortfolio() {
         </AnimatePresence>
 
         <div ref={introTitleRef} className="intro-title" aria-hidden="true">
-          <span>A Study in Systems</span>
+          {/* Each letter carries an ink dot: the intro condenses the letters into dots that run together into the drop. */}
+          <span className="intro-line">
+            {Array.from(introTitle).map((character, index) => (
+              character === " "
+                ? <span key={index} className="intro-space"> </span>
+                : (
+                  <span key={index} className="intro-letter">
+                    <span className="intro-glyph">{character}</span>
+                    <i className="intro-dot" />
+                  </span>
+                )
+            ))}
+          </span>
         </div>
 
         {showScene && !sceneReady && !introSkipped && !reducedMotion && (

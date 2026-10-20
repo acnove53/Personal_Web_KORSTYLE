@@ -84,6 +84,8 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
       uWindStrength: { value: windStrength },
       uWash: { value: wash },
       uNoiseStrength: { value: noiseStrength },
+      // Overall visibility; the cliff uses it to ink in with the background rather than with the tree.
+      uReveal: { value: 1 },
     },
     vertexShader: /* glsl */ `
       attribute float aWash;
@@ -151,6 +153,7 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
       uniform float uFogDensity;
       uniform float uProgress;
       uniform float uWash;
+      uniform float uReveal;
 
       varying vec2 vUv;
       varying vec3 vNormal;
@@ -229,23 +232,30 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
 
         // Rock (aBark = -1): horizontal axe-cut strokes and moss dots on its upper faces.
         float rock = step(vBark, -0.5);
-        float axeCut = smoothstep(0.64, 0.72, noise3d(vWorldPosition * vec3(1.4, 9.0, 1.4) + 2.0)) * (0.45 + 0.55 * shade);
-        float rockMoss = step(0.86, noise3d(vWorldPosition * 13.0)) * smoothstep(0.2, 0.6, worldNormal.y);
+        // The cliff is a large surface seen up close, so its strokes are finer and lighter than the boulder's.
+        bool isCliff = vBark < -1.5;
+        vec3 axeScale = isCliff ? vec3(2.6, 16.0, 2.6) : vec3(1.4, 9.0, 1.4);
+        float axeCut = smoothstep(0.64, 0.72, noise3d(vWorldPosition * axeScale + 2.0)) * (0.45 + 0.55 * shade) * (isCliff ? 0.7 : 1.0);
+        if (isCliff) ink *= 0.72;
+        float rockMoss = step(isCliff ? 0.93 : 0.86, noise3d(vWorldPosition * 13.0)) * smoothstep(0.2, 0.6, worldNormal.y);
         ink = 1.0 - (1.0 - ink) * (1.0 - rock * axeCut * 0.88);
         ink = 1.0 - (1.0 - ink) * (1.0 - rock * rockMoss * 0.85);
 
         // Contour: a brush line that swells and thins along the branch and breaks into flying white.
         float rim = 1.0 - abs(dot(viewNormal, normalize(vViewPosition)));
         float brushPressure = noise3d(vec3(surface.y * 0.45, 3.3, vCells.x * 0.37));
-        float edgeStart = mix(0.34, 0.18, brushPressure);
+        // A thin outline on the cliff: a rim-based contour on such a big surface would become broad bands.
+        float edgeStart = vBark < -1.5 ? mix(0.74, 0.62, brushPressure) : mix(0.34, 0.18, brushPressure);
         float contour = smoothstep(edgeStart, edgeStart + 0.07, rim);
         // Flying white: the dry brush skips in streaks that run along the stroke.
         float flyingWhite = smoothstep(0.66, 0.82, noise3d(vec3(rim * 9.0, surface.y * 1.4, 8.0)));
         contour *= 1.0 - flyingWhite * 0.55;
         ink = max(ink, contour * 0.96);
 
-        // Nothing is drawn below the ground line: roots enter the soil and the boulder sits on it.
-        if (vLocalY < -0.03) discard;
+        // Nothing is drawn below the ground line (roots enter the soil, the boulder sits on it),
+        // except the cliff (aBark -2), which falls away beneath the tree.
+        bool cliff = vBark < -1.5;
+        if (!cliff && vLocalY < -0.03) discard;
         float reveal = inkReveal(vWorldPosition, viewNormal, vLocalY, uProgress);
         if (reveal < -0.025) discard;
         float wetEdge = 1.0 - smoothstep(0.015, 0.24, max(reveal, 0.0));
@@ -255,6 +265,9 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
         float alpha = smoothstep(-0.02, 0.17, reveal);
         // Root tips break up like a dry brush as they fade into the soil.
         if (vFade < 0.999) alpha *= smoothstep(0.0, 0.6, vFade * (0.65 + 0.7 * noise3d(vec3(surface * vec2(4.0, 1.2), 6.0))));
+        // Only a band of rock shows under the roots before the cliff dissolves into mist.
+        if (cliff) alpha *= smoothstep(-3.2, -0.5, vLocalY + (noise3d(vWorldPosition * 0.8) - 0.5) * 0.9);
+        alpha *= uReveal;
         if (alpha < 0.01) discard;
         float fogVisibility = exp(-uFogDensity * uFogDensity * max(vViewDepth, 0.0) * max(vViewDepth, 0.0));
         if (fogVisibility < 0.008) discard;

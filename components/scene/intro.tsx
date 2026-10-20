@@ -6,6 +6,7 @@ import { gsap } from "gsap";
 import { useEffect, useMemo, useRef } from "react";
 import { createContactShadowMaterial, createGlossyInkMaterial } from "./ink-drop-material";
 import { seedUnit, smoothStep } from "./math";
+import { createLakeMaterial } from "./water-materials";
 
 export type IntroTimeline = {
   elapsed: number;
@@ -16,17 +17,17 @@ export type IntroTimeline = {
   phase: "title" | "seed" | "drop" | "splash" | "sprout" | "complete";
   // Set when the visitor skips the intro or prefers reduced motion: later steps snap instead of animating.
   instant: boolean;
+  // 0..1: the landscape inks in after the tree has finished drawing, before the About zoom.
+  backgroundReveal: number;
+  backgroundElapsed: number;
   splash: {
     active: boolean;
-    puddleScale: number;
-    rippleScale: number;
-    rippleFront: number;
-    rippleOpacity: number;
-    puddleOpacity: number;
-    crownProgress: number;
-    crownOpacity: number;
-    dropletProgress: number;
-    dropletOpacity: number;
+    // Seconds since impact; every part of the splash is a function of this clock.
+    time: number;
+    // The still lake fades in under the falling drop.
+    lake: number;
+    // Everything fades out as the tree grows.
+    fade: number;
   };
   seed: {
     x: number;
@@ -49,8 +50,23 @@ export type IntroTimeline = {
 
 const introSproutDuration = 3;
 const dropFallDuration = 1.08;
+const splashDuration = 2.4;
+const backgroundRevealDuration = 1.6;
 const seedStart = { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false, pinch: 0.8, sag: 1, fall: 0 };
 const satelliteStart = { y: 3.85, scale: 0, visible: false };
+const splashStart = { active: false, time: 0, lake: 0, fade: 0 };
+
+// Splash choreography, in seconds after impact.
+const crownPeak = 0.16;
+const crownGone = 0.62;
+const jetStart = 0.3;
+const jetPeak = 0.75;
+const jetGone = 1.25;
+const jetHeight = 1.05;
+const jetDropRelease = 0.8;
+const jetDropLanding = 1.3;
+const jetDropGravity = 11.6;
+const jetDropLift = 0.8;
 
 export function createIntroTimeline(): IntroTimeline {
   return {
@@ -61,18 +77,9 @@ export function createIntroTimeline(): IntroTimeline {
     cameraZoom: 0,
     phase: "title",
     instant: false,
-    splash: {
-      active: false,
-      puddleScale: 0,
-      rippleScale: 0,
-      rippleFront: 0,
-      rippleOpacity: 0,
-      puddleOpacity: 0,
-      crownProgress: 0,
-      crownOpacity: 0,
-      dropletProgress: 0,
-      dropletOpacity: 0,
-    },
+    backgroundReveal: 0,
+    backgroundElapsed: 0,
+    splash: { ...splashStart },
     seed: { ...seedStart },
     satellite: { ...satelliteStart },
   };
@@ -90,40 +97,54 @@ export function IntroSequence({ intro, titleRef, skip }: {
   useEffect(() => {
     const title = titleRef.current;
     if (!title) return;
+    const glyphs = title.querySelectorAll<HTMLElement>(".intro-glyph");
+    const dots = title.querySelectorAll<HTMLElement>(".intro-dot");
 
     intro.elapsed = 0;
     intro.progress = 0;
     intro.complete = false;
     intro.cameraZoom = 0;
     intro.phase = "title";
-    Object.assign(intro.splash, {
-      active: false,
-      puddleScale: 0,
-      rippleScale: 0,
-      rippleFront: 0,
-      rippleOpacity: 0,
-      puddleOpacity: 0,
-      crownProgress: 0,
-      crownOpacity: 0,
-      dropletProgress: 0,
-      dropletOpacity: 0,
-    });
+    intro.backgroundReveal = 0;
+    intro.backgroundElapsed = 0;
+    Object.assign(intro.splash, splashStart);
     Object.assign(intro.seed, seedStart);
     Object.assign(intro.satellite, satelliteStart);
     gsap.set(title, { opacity: 0, scale: 0.94, filter: "blur(12px)" });
+    gsap.set(glyphs, { opacity: 1, scale: 1, y: 0, filter: "blur(0px)" });
+    gsap.set(dots, { opacity: 0, scale: 0.2, x: 0, y: 0 });
+
+    // Distance from a dot to the title's centre, which is where the 3D drop forms (the screen centre).
+    const toCenter = (axis: "x" | "y") => (_index: number, dot: HTMLElement) => {
+      const box = title.getBoundingClientRect();
+      const own = dot.getBoundingClientRect();
+      return axis === "x"
+        ? box.left + box.width / 2 - (own.left + own.width / 2)
+        : box.top + box.height / 2 - (own.top + own.height / 2);
+    };
 
     const timeline = gsap.timeline();
     timelineRef.current = timeline;
     timeline.to(title, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.85, ease: "sine.out" });
     timeline.to({}, { duration: 0.32 });
-    timeline.to(title, {
+    // Each letter condenses into a bead of ink, outer letters first...
+    timeline.addLabel("condense");
+    timeline.to(glyphs, {
       opacity: 0,
-      scale: 0.84,
-      filter: "blur(12px)",
-      duration: 0.68,
+      scale: 0.35,
+      y: 6,
+      filter: "blur(6px)",
+      duration: 0.42,
       ease: "power2.in",
+      stagger: { each: 0.03, from: "edges" },
       onStart: () => { intro.phase = "seed"; },
-    });
+    }, "condense");
+    timeline.to(dots, { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out", stagger: { each: 0.03, from: "edges" } }, "condense+=0.12");
+    // ...then the beads run together to the centre, where they become the drop.
+    timeline.to(dots, { x: toCenter("x"), scale: 0.55, duration: 0.62, ease: "power2.in", stagger: { each: 0.02, from: "edges" } }, "condense+=0.5");
+    timeline.to(dots, { y: toCenter("y"), duration: 0.62, ease: "back.in(1.6)", stagger: { each: 0.02, from: "edges" } }, "condense+=0.5");
+    timeline.to(dots, { opacity: 0, duration: 0.16, ease: "power1.in" }, "condense+=1.0");
+    timeline.set(title, { opacity: 0 }, "condense+=1.2");
     // The drop swells while hanging from a thinning neck, sagging under its weight.
     timeline.to(intro.seed, {
       scaleX: 1,
@@ -135,7 +156,7 @@ export function IntroSequence({ intro, titleRef, skip }: {
       duration: 0.56,
       ease: "power2.out",
       onStart: () => { intro.seed.visible = true; },
-    }, "<+=0.12");
+    }, "condense+=0.86");
     timeline.addLabel("release");
     // The neck snaps: the drop rounds out, and the broken neck becomes a small satellite droplet.
     timeline.to(intro.seed, { pinch: 0, sag: 1, duration: 0.14, ease: "power3.out" }, "release");
@@ -151,85 +172,34 @@ export function IntroSequence({ intro, titleRef, skip }: {
       fall: 1,
       duration: dropFallDuration,
       ease: "power2.in",
-      onStart: () => { intro.phase = "drop"; },
+      onStart: () => {
+        intro.phase = "drop";
+        intro.splash.active = true;
+      },
     }, "release");
-    timeline.call(() => {
-      intro.phase = "splash";
-      Object.assign(intro.splash, {
-        active: true,
-        puddleScale: 0,
-        rippleScale: 0,
-        rippleFront: 0,
-        rippleOpacity: 1,
-        puddleOpacity: 1,
-        crownProgress: 0,
-        crownOpacity: 1,
-        dropletProgress: 0,
-        dropletOpacity: 1,
-      });
-    }, undefined, `release+=${dropFallDuration}`);
+    // The still lake appears beneath the falling drop.
+    timeline.to(intro.splash, { lake: 1, duration: 0.7, ease: "sine.out" }, "release+=0.15");
     timeline.addLabel("impact", `release+=${dropFallDuration}`);
-    timeline.to(intro.seed, {
-      scaleX: 1.55,
-      scaleY: 0.045,
-      scaleZ: 1.55,
-      duration: 0.12,
-      ease: "power4.out",
-    }, "impact");
+    timeline.call(() => { intro.phase = "splash"; }, undefined, "impact");
+    timeline.to(intro.seed, { scaleX: 1.4, scaleY: 0.08, scaleZ: 1.4, duration: 0.07, ease: "power4.out" }, "impact");
     timeline.to(intro.seed, {
       opacity: 0,
-      duration: 0.18,
+      duration: 0.09,
       ease: "power1.out",
       onComplete: () => { intro.seed.visible = false; },
-    }, "impact+=0.025");
+    }, "impact+=0.02");
+    timeline.to(intro.splash, { time: splashDuration, duration: splashDuration, ease: "none" }, "impact");
+    // The tree starts drawing itself out of the spreading ink while the ripples die away.
+    timeline.call(() => {
+      intro.phase = "sprout";
+      intro.elapsed = 0;
+    }, undefined, "impact+=1.6");
     timeline.to(intro.splash, {
-      puddleScale: 2.15,
-      duration: 0.3,
-      ease: "expo.out",
-    }, "impact");
-    timeline.to(intro.splash, {
-      rippleScale: 3.6,
-      rippleFront: 1,
-      duration: 0.78,
-      ease: "power2.out",
-    }, "impact");
-    timeline.to(intro.splash, {
-      crownProgress: 1,
-      duration: 1.02,
-      ease: "none",
-    }, "impact");
-    timeline.to(intro.splash, {
-      dropletProgress: 1,
-      duration: 1.1,
-      ease: "none",
-    }, "impact");
-    timeline.addLabel("puddle-rest", "impact+=0.78");
-    timeline.to({}, { duration: 0.2 }, "puddle-rest");
-    timeline.to(intro.splash, {
-      rippleOpacity: 0,
-      duration: 0.3,
-      ease: "power1.out",
-      onStart: () => {
-        intro.phase = "sprout";
-        intro.elapsed = 0;
-      },
+      fade: 1,
+      duration: 0.8,
+      ease: "power1.in",
       onComplete: () => { intro.splash.active = false; },
-    }, "puddle-rest+=0.2");
-    timeline.to(intro.splash, {
-      dropletOpacity: 0,
-      duration: 0.25,
-      ease: "power1.out",
-    }, "puddle-rest+=0.2");
-    timeline.to(intro.splash, {
-      puddleOpacity: 0,
-      duration: 0.32,
-      ease: "power1.out",
-    }, "puddle-rest+=0.2");
-    timeline.to(intro.splash, {
-      crownOpacity: 0,
-      duration: 0.28,
-      ease: "power1.out",
-    }, "puddle-rest+=0.2");
+    }, "impact+=1.6");
     timeline.eventCallback("onComplete", () => {
       intro.seed.visible = false;
       intro.splash.active = false;
@@ -244,6 +214,7 @@ export function IntroSequence({ intro, titleRef, skip }: {
   useEffect(() => {
     if (!skip) return;
     intro.instant = true;
+    intro.backgroundReveal = 1;
     if (intro.phase === "complete") return;
     timelineRef.current?.kill();
     timelineRef.current = null;
@@ -277,6 +248,11 @@ export function IntroSequence({ intro, titleRef, skip }: {
       intro.fogDensity = fog.density;
       intro.progress = 0;
       intro.complete = false;
+    }
+    // Once the tree is drawn, the landscape inks in around it.
+    if (intro.complete && intro.backgroundReveal < 1) {
+      intro.backgroundElapsed += Math.min(delta, 0.1);
+      intro.backgroundReveal = intro.instant ? 1 : smoothStep(0, backgroundRevealDuration, intro.backgroundElapsed);
     }
   });
 
@@ -355,7 +331,7 @@ export function SeedParticle({ intro }: { intro: IntroTimeline }) {
       }
     }
     if (shadow) {
-      // High up, the shadow is wide and faint; it tightens and darkens as the drop nears the surface.
+      // A faint shadow on the water that tightens as the drop nears the surface.
       const casting = state.visible && (intro.phase === "seed" || intro.phase === "drop" || intro.phase === "splash");
       shadow.visible = casting;
       if (casting) {
@@ -363,7 +339,7 @@ export function SeedParticle({ intro }: { intro: IntroTimeline }) {
         const nearness = 1 - Math.min(1, height / 3.85);
         shadow.position.set(state.x, 0.004, state.z);
         shadow.scale.setScalar((0.1 + 0.07 * height) * 2 * Math.max(state.scaleX, 0.001));
-        shadowMaterial.uniforms.uOpacity.value = 0.34 * nearness * nearness * state.opacity;
+        shadowMaterial.uniforms.uOpacity.value = 0.18 * nearness * nearness * state.opacity;
       }
     }
   });
@@ -377,118 +353,130 @@ export function SeedParticle({ intro }: { intro: IntroTimeline }) {
   );
 }
 
+type Droplet = { angle: number; start: number; radius: number; height: number; outward: number; upward: number; size: number };
+
+// The ink lands in a still lake: a crown sheet whose rim breaks into jets and droplets, a central
+// rebound jet that pinches off a drop, rings of ripples, and ink blooming over the water.
 export function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   const crown = useRef<THREE.Mesh>(null);
-  const puddle = useRef<THREE.Mesh>(null);
-  const ripple = useRef<THREE.Mesh>(null);
+  const lake = useRef<THREE.Mesh>(null);
+  const jet = useRef<THREE.Mesh>(null);
+  const jetDrop = useRef<THREE.Mesh>(null);
   const droplets = useRef<THREE.InstancedMesh>(null);
-  const crownGeometry = useMemo(() => createCrownSheetGeometry(96), []);
-  const puddleGeometry = useMemo(() => createInkPuddleGeometry(), []);
-  const rippleGeometry = useMemo(() => new THREE.CircleGeometry(1, 96), []);
+  const crownGeometry = useMemo(() => createCrownSheetGeometry(128), []);
+  const lakeGeometry = useMemo(() => new THREE.RingGeometry(0.0001, 4.5, 220, 140), []);
+  const jetGeometry = useMemo(() => createJetGeometry(), []);
+  const jetDropGeometry = useMemo(() => new THREE.SphereGeometry(0.065, 24, 18), []);
   const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
-  const crownMaterial = useMemo(() => createCrownMaterial(), []);
-  const puddleMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-    color: "#000000",
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    toneMapped: false,
-    fog: false,
-  }), []);
-  const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
+  const crownMaterial = useMemo(() => createGlossyInkMaterial(), []);
+  const lakeMaterial = useMemo(() => createLakeMaterial(), []);
+  const jetMaterial = useMemo(() => createGlossyInkMaterial(), []);
+  const jetDropMaterial = useMemo(() => createGlossyInkMaterial(), []);
   const dropletMaterial = useMemo(() => createGlossyInkMaterial(), []);
   const particleTransform = useMemo(() => new THREE.Object3D(), []);
-  const particleLayout = useMemo(() => Array.from({ length: 64 }, (_, index) => ({
-    angle: seedUnit(23, index) * Math.PI * 2,
-    reach: 0.72 + seedUnit(41, index) * 1.3,
-    apex: 2 + seedUnit(59, index) * 0.8,
-    flightTime: 0.72 + seedUnit(67, index) * 0.46,
-    // Splash droplets are a small fraction of the drop's size (radius 0.14), or they read as marbles.
-    size: 0.012 + Math.pow(seedUnit(71, index), 2) * 0.03,
-  })), []);
+  // Half the droplets break off the crown's cusps; the rest are finer, faster spray from the impact.
+  const dropletLayout = useMemo<Droplet[]>(() => Array.from({ length: 64 }, (_, index) => {
+    const fromCusp = index < 32;
+    const cusp = index % 16;
+    return fromCusp
+      ? {
+        angle: (cusp / 16) * Math.PI * 2 + (seedUnit(23, index) - 0.5) * 0.12,
+        start: crownPeak - 0.03 + seedUnit(29, index) * 0.08,
+        radius: 0.88,
+        height: 0.55,
+        outward: 1.2 + seedUnit(41, index) * 0.9,
+        upward: 1.3 + seedUnit(59, index) * 1.3,
+        size: 0.022 + Math.pow(seedUnit(71, index), 2) * 0.024,
+      }
+      : {
+        angle: seedUnit(83, index) * Math.PI * 2,
+        start: 0.02 + seedUnit(89, index) * 0.06,
+        radius: 0.35,
+        height: 0.1,
+        outward: 1.8 + seedUnit(97, index) * 1.4,
+        upward: 1.8 + seedUnit(101, index) * 1.6,
+        size: 0.008 + seedUnit(103, index) * 0.012,
+      };
+  }), []);
 
   useEffect(() => () => {
-    crownGeometry.dispose();
-    puddleGeometry.dispose();
-    rippleGeometry.dispose();
-    dropletGeometry.dispose();
-    crownMaterial.dispose();
-    puddleMaterial.dispose();
-    rippleMaterial.dispose();
-    dropletMaterial.dispose();
-  }, [crownGeometry, crownMaterial, dropletGeometry, dropletMaterial, puddleGeometry, puddleMaterial, rippleGeometry, rippleMaterial]);
+    for (const geometry of [crownGeometry, lakeGeometry, jetGeometry, jetDropGeometry, dropletGeometry]) geometry.dispose();
+    for (const material of [crownMaterial, lakeMaterial, jetMaterial, jetDropMaterial, dropletMaterial]) material.dispose();
+  }, [crownGeometry, crownMaterial, dropletGeometry, dropletMaterial, jetDropGeometry, jetDropMaterial, jetGeometry, jetMaterial, lakeGeometry, lakeMaterial]);
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const splash = intro.splash;
+    const meshes = [crown.current, lake.current, jet.current, jetDrop.current, droplets.current];
     if (!splash.active) {
-      if (crown.current) crown.current.visible = false;
-      if (puddle.current) puddle.current.visible = false;
-      if (ripple.current) ripple.current.visible = false;
-      if (droplets.current) droplets.current.visible = false;
+      for (const mesh of meshes) if (mesh) mesh.visible = false;
       return;
     }
+    const t = splash.time;
+    const impacted = intro.phase !== "drop";
+    const keep = 1 - splash.fade;
+    const origin = intro.seed;
+
+    if (lake.current) {
+      lake.current.visible = true;
+      lake.current.position.set(origin.x, 0.006, origin.z);
+      lakeMaterial.uniforms.uTime.value = impacted ? t : 0;
+      lakeMaterial.uniforms.uSecondTime.value = jetDropLanding;
+      lakeMaterial.uniforms.uLake.value = splash.lake * keep;
+      lakeMaterial.uniforms.uBloom.value = impacted ? keep : 0;
+    }
+
     if (crown.current) {
-      const progress = THREE.MathUtils.clamp(splash.crownProgress, 0, 1);
-      const rise = progress < 0.2
-        ? smoothStep(0, 0.2, progress)
-        : 1 - smoothStep(0.2, 1, progress);
-      const expansion = smoothStep(0, 0.22, progress);
-      const positions = crownGeometry.getAttribute("position") as THREE.BufferAttribute;
-      const segments = positions.count / 3;
-      for (let ring = 0; ring < 3; ring++) {
-        for (let segment = 0; segment < segments; segment++) {
-          const angle = (segment / segments) * Math.PI * 2;
-          const rippleNoise = Math.sin(angle * 7 + 0.5) * 0.045 + Math.cos(angle * 13 - 0.8) * 0.022;
-          const jet = Math.pow(Math.max(0, Math.cos(angle * 9 + Math.sin(angle * 3) * 0.35)), 18);
-          const baseRadius = 0.22 + expansion * 0.68;
-          const ringRadius = ring === 0 ? baseRadius * 0.28 : ring === 1 ? baseRadius * 0.69 : baseRadius * (1 + rippleNoise);
-          const sheetHeight = ring === 0
-            ? 0.025
-            : ring === 1
-              ? rise * (0.3 + rippleNoise * 0.35)
-              : rise * (0.62 + jet * 0.44 + rippleNoise);
-          const index = ring * segments + segment;
-          positions.setXYZ(index, Math.cos(angle) * ringRadius, 0.022 + sheetHeight, Math.sin(angle) * ringRadius);
-        }
+      const rise = smoothStep(0, crownPeak * 0.75, t) * (1 - smoothStep(crownPeak, crownGone, t));
+      crown.current.visible = impacted && rise > 0.002;
+      if (crown.current.visible) {
+        updateCrown(crownGeometry, t, rise);
+        crown.current.position.set(origin.x, 0, origin.z);
+        crownMaterial.uniforms.uOpacity.value = keep;
       }
-      positions.needsUpdate = true;
-      crownGeometry.computeVertexNormals();
-      crown.current.visible = splash.active && splash.crownOpacity > 0.002;
-      crownMaterial.uniforms.uOpacity.value = splash.crownOpacity;
     }
-    if (puddle.current) {
-      puddle.current.visible = splash.active && splash.puddleOpacity > 0.002;
-      puddle.current.position.set(intro.seed.x, 0.009, intro.seed.z);
-      puddle.current.scale.setScalar(splash.puddleScale);
-      puddleMaterial.opacity = splash.puddleOpacity;
+
+    if (jet.current) {
+      const grow = smoothStep(jetStart, jetPeak, t);
+      const sink = 1 - smoothStep(jetDropRelease, jetGone, t);
+      const height = jetHeight * grow * sink;
+      jet.current.visible = impacted && height > 0.01;
+      jet.current.position.set(origin.x, 0, origin.z);
+      jet.current.scale.set(1 - 0.25 * (1 - sink), Math.max(height, 0.001), 1 - 0.25 * (1 - sink));
+      jetMaterial.uniforms.uOpacity.value = keep;
     }
-    if (ripple.current) {
-      ripple.current.visible = splash.active && splash.rippleOpacity > 0.002;
-      ripple.current.position.set(intro.seed.x, 0.012, intro.seed.z);
-      ripple.current.scale.setScalar(splash.rippleScale);
-      rippleMaterial.uniforms.uFront.value = splash.rippleFront;
-      rippleMaterial.uniforms.uOpacity.value = splash.rippleOpacity;
-      rippleMaterial.uniforms.uTime.value = clock.elapsedTime;
+
+    if (jetDrop.current) {
+      // Sits on the column's tip until it pinches off, flies up a little, then falls back in.
+      let y = -1;
+      if (t > jetStart && t < jetDropRelease) y = jetHeight * smoothStep(jetStart, jetPeak, t);
+      else if (t >= jetDropRelease) {
+        const flight = t - jetDropRelease;
+        y = jetHeight + jetDropLift * flight - 0.5 * jetDropGravity * flight * flight;
+      }
+      jetDrop.current.visible = impacted && y > 0.02 && t > jetStart + 0.15;
+      jetDrop.current.position.set(origin.x, y, origin.z);
+      jetDropMaterial.uniforms.uOpacity.value = keep;
     }
 
     const mesh = droplets.current;
     if (!mesh) return;
-    mesh.visible = splash.active && splash.dropletOpacity > 0.002;
-    dropletMaterial.uniforms.uOpacity.value = splash.dropletOpacity;
-    const elapsed = THREE.MathUtils.clamp(splash.dropletProgress, 0, 1) * 1.1;
-    particleLayout.forEach((particle, index) => {
-      const particleProgress = THREE.MathUtils.clamp(elapsed / particle.flightTime, 0, 1);
-      const travel = particleProgress * particle.reach;
-      const height = 4 * particle.apex * particleProgress * (1 - particleProgress);
-      const landingScale = 1 - smoothStep(0.82, 1, particleProgress);
-      particleTransform.position.set(
-        intro.seed.x + Math.cos(particle.angle) * travel,
-        0.022 + height,
-        intro.seed.z + Math.sin(particle.angle) * travel,
-      );
-      particleTransform.scale.set(particle.size * 0.72, particle.size * 1.55 * landingScale, particle.size * 0.72);
-      particleTransform.rotation.set(Math.cos(particle.angle) * 0.24, 0, -Math.sin(particle.angle) * 0.24);
+    mesh.visible = impacted;
+    dropletMaterial.uniforms.uOpacity.value = keep;
+    const gravity = 9.8;
+    dropletLayout.forEach((droplet, index) => {
+      const flight = t - droplet.start;
+      const y = droplet.height + droplet.upward * flight - 0.5 * gravity * flight * flight;
+      if (flight <= 0 || y < 0) {
+        particleTransform.scale.setScalar(0);
+      } else {
+        const reach = droplet.radius + droplet.outward * flight;
+        particleTransform.position.set(origin.x + Math.cos(droplet.angle) * reach, y, origin.z + Math.sin(droplet.angle) * reach);
+        // Stretched along its flight direction, as fast droplets are.
+        const verticalSpeed = droplet.upward - gravity * flight;
+        const speed = Math.hypot(droplet.outward, verticalSpeed);
+        particleTransform.scale.set(droplet.size, droplet.size * (1 + speed * 0.12), droplet.size);
+        particleTransform.rotation.set(0, -droplet.angle, -Math.atan2(droplet.outward, verticalSpeed));
+      }
       particleTransform.updateMatrix();
       mesh.setMatrixAt(index, particleTransform.matrix);
     });
@@ -497,35 +485,13 @@ export function ImpactSplash({ intro }: { intro: IntroTimeline }) {
 
   return (
     <group position={[1.45, -2.8, 0]}>
-      <mesh
-        ref={crown}
-        geometry={crownGeometry}
-        material={crownMaterial}
-        visible={false}
-        frustumCulled={false}
-        renderOrder={5}
-      />
-      <mesh
-        ref={puddle}
-        geometry={puddleGeometry}
-        material={puddleMaterial}
-        rotation={[-Math.PI / 2, 0, 0]}
-        scale={0}
-        visible={false}
-        renderOrder={3}
-      />
-      <mesh
-        ref={ripple}
-        geometry={rippleGeometry}
-        material={rippleMaterial}
-        rotation={[-Math.PI / 2, 0, 0]}
-        scale={0}
-        visible={false}
-        renderOrder={4}
-      />
+      <mesh ref={lake} geometry={lakeGeometry} material={lakeMaterial} rotation={[-Math.PI / 2, 0, 0]} visible={false} frustumCulled={false} renderOrder={3} />
+      <mesh ref={crown} geometry={crownGeometry} material={crownMaterial} visible={false} frustumCulled={false} renderOrder={5} />
+      <mesh ref={jet} geometry={jetGeometry} material={jetMaterial} visible={false} frustumCulled={false} renderOrder={5} />
+      <mesh ref={jetDrop} geometry={jetDropGeometry} material={jetDropMaterial} visible={false} renderOrder={6} />
       <instancedMesh
         ref={droplets}
-        args={[dropletGeometry, dropletMaterial, particleLayout.length]}
+        args={[dropletGeometry, dropletMaterial, dropletLayout.length]}
         visible={false}
         frustumCulled={false}
         renderOrder={6}
@@ -534,21 +500,19 @@ export function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   );
 }
 
+const crownRings = 5;
+
 function createCrownSheetGeometry(segments: number) {
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
-  const radii = [0.28, 0.68, 0.98];
-
-  for (let ring = 0; ring < 3; ring++) {
+  for (let ring = 0; ring < crownRings; ring++) {
     for (let segment = 0; segment < segments; segment++) {
-      const angle = (segment / segments) * Math.PI * 2;
-      positions.push(Math.cos(angle) * radii[ring], 0.022, Math.sin(angle) * radii[ring]);
-      uvs.push(segment / segments, ring / 2);
+      positions.push(0, 0, 0);
+      uvs.push(segment / segments, ring / (crownRings - 1));
     }
   }
-
-  for (let ring = 0; ring < 2; ring++) {
+  for (let ring = 0; ring < crownRings - 1; ring++) {
     for (let segment = 0; segment < segments; segment++) {
       const next = (segment + 1) % segments;
       const a = ring * segments + segment;
@@ -558,104 +522,41 @@ function createCrownSheetGeometry(segments: number) {
       indices.push(a, c, b, b, c, d);
     }
   }
-
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(new Array(positions.length).fill(0), 3));
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
-  geometry.computeVertexNormals();
   return geometry;
 }
 
-function createCrownMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: { uOpacity: { value: 0 } },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uOpacity;
-      varying vec2 vUv;
-      void main() {
-        float ribs = pow(max(0.0, sin(vUv.x * 6.2831853 * 9.0 + 0.7)), 16.0);
-        float wetEdge = smoothstep(0.72, 1.0, vUv.y);
-        vec3 ink = mix(vec3(0.012), vec3(0.052), vUv.y * 0.7);
-        ink = mix(ink, vec3(0.14), ribs * wetEdge * 0.42);
-        gl_FragColor = vec4(ink, uOpacity);
-        #include <colorspace_fragment>
-      }
-    `,
-    side: THREE.DoubleSide,
-    transparent: true,
-    depthWrite: false,
-    toneMapped: false,
-    fog: false,
-  });
-}
-
-function createInkPuddleGeometry() {
-  const geometry = new THREE.CircleGeometry(1, 128);
-  const positions = geometry.getAttribute("position");
-  for (let index = 0; index < positions.count; index++) {
-    const x = positions.getX(index);
-    const y = positions.getY(index);
-    const radius = Math.hypot(x, y);
-    if (radius < 0.001) continue;
-    const angle = Math.atan2(y, x);
-    const edgeVariation = 1
-      + Math.sin(angle * 5 + 0.4) * 0.055
-      + Math.sin(angle * 11 - 0.7) * 0.025
-      + Math.cos(angle * 17 + 1.3) * 0.012;
-    positions.setXY(index, x * edgeVariation, y * edgeVariation);
+// The crown: a crater floor rising into a thin sheet whose lip flares outward and lifts ~16 cusps
+// (the jets that shed droplets).
+function updateCrown(geometry: THREE.BufferGeometry, t: number, rise: number) {
+  const positions = geometry.getAttribute("position") as THREE.BufferAttribute;
+  const segments = positions.count / crownRings;
+  const radius = 0.22 + 0.72 * smoothStep(0, 0.3, t);
+  const ringRadius = [0.25, 0.55, 0.8, 0.95, 1.05];
+  const ringHeight = [-0.06, 0.12, 0.42, 0.78, 0.92];
+  for (let ring = 0; ring < crownRings; ring++) {
+    for (let segment = 0; segment < segments; segment++) {
+      const angle = (segment / segments) * Math.PI * 2;
+      const wobble = Math.sin(angle * 5 + 0.7) * 0.04 + Math.cos(angle * 11 - 0.4) * 0.02;
+      const cusp = Math.pow(Math.max(0, Math.cos(angle * 8 + Math.sin(angle * 3) * 0.3)), 10);
+      const lip = ring === crownRings - 1;
+      const r = radius * (ringRadius[ring] + (lip ? cusp * 0.07 : 0) + wobble * (ring / crownRings));
+      const h = rise * 0.6 * (ringHeight[ring] + (lip ? cusp * 0.55 : 0) + wobble);
+      positions.setXYZ(ring * segments + segment, Math.cos(angle) * r, 0.01 + h, Math.sin(angle) * r);
+    }
   }
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
-  return geometry;
 }
 
-function createImpactRippleMaterial() {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uFront: { value: 0 },
-      uOpacity: { value: 0 },
-      uTime: { value: 0 },
-      uInk: { value: new THREE.Color("#000000") },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uFront;
-      uniform float uOpacity;
-      uniform float uTime;
-      uniform vec3 uInk;
-      varying vec2 vUv;
-
-      void main() {
-        float radius = length(vUv - 0.5) * 2.0;
-        float wavePhase = (radius - uFront) * 72.0 - uTime * 1.7;
-        float radialDisplacement = sin(wavePhase) * 0.018 * exp(-abs(radius - uFront) * 11.0);
-        float waveDistance = abs(radius + radialDisplacement - uFront);
-        float crown = exp(-waveDistance * 92.0);
-        float trailingRing = exp(-abs(radius - uFront + 0.065) * 44.0);
-        float paperFade = 1.0 - smoothstep(0.96, 1.0, radius);
-        float alpha = (crown * 0.88 + trailingRing * 0.3) * paperFade * uOpacity;
-        if (alpha < 0.006) discard;
-        gl_FragColor = vec4(uInk, alpha);
-        #include <colorspace_fragment>
-      }
-    `,
-    side: THREE.DoubleSide,
-    transparent: true,
-    depthWrite: false,
-    toneMapped: false,
-  });
+// The rebound column, normalised to height 1: a broad base narrowing to a neck under a bulb.
+function createJetGeometry() {
+  const profile = [
+    [0.12, 0], [0.075, 0.12], [0.052, 0.35], [0.045, 0.62], [0.04, 0.82], [0.03, 0.9], [0.012, 0.94], [0, 0.95],
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  return new THREE.LatheGeometry(profile, 32);
 }

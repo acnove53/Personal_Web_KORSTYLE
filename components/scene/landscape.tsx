@@ -19,6 +19,7 @@ type LayerDef = {
 };
 
 const designCameraZ = 14.2;
+const revealWindows: Record<string, [number, number]> = { far: [0, 0.55], middle: [0.2, 0.75], near: [0.4, 0.9] };
 const inkColor = "#1b1a18";
 const paperColor = "#f9f8f6";
 const sunZ = -150;
@@ -156,11 +157,17 @@ export function InkLandscape({ intro, reducedMotion }: { intro: IntroTimeline; r
   useFrame(({ camera }, delta) => {
     const perspective = camera as THREE.PerspectiveCamera;
     const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
-    const reveal = smoothStep(0.35, 1, intro.progress);
+    // The landscape inks in only after the tree is drawn, far ranges first, the sun and waterfall last.
+    const background = intro.backgroundReveal;
+    const reveal = smoothStep(0.6, 1, background);
 
     layers.forEach((layer, index) => {
       const group = groupRefs.current[index];
       if (!group) return;
+      const [from, to] = revealWindows[layer.id] ?? [0, 1];
+      const layerReveal = smoothStep(from, to, background);
+      layer.paintingMaterial.opacity = layerReveal;
+      layer.mistMaterial.opacity = layerReveal;
       let shift = 0;
       if (layer.waterfall) {
         // Keep the waterfall at the same fraction of the screen width on narrow and wide viewports.

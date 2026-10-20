@@ -117,7 +117,8 @@ export function CameraController({
     const cameraY = offset < 0.5
       ? THREE.MathUtils.lerp(3.6, 1.05, offset / 0.5)
       : THREE.MathUtils.lerp(1.05, -2.4, (offset - 0.5) / 0.5);
-    const centered = stage === "trunk" && Math.abs(offset - 0.5) < 0.16;
+    // The About zoom waits for the landscape to finish inking in around the drawn tree.
+    const centered = stage === "trunk" && Math.abs(offset - 0.5) < 0.16 && intro.backgroundReveal >= 0.98;
     if (intro.instant && introZoomTimeline.current?.isActive()) {
       introZoomTimeline.current.progress(1);
       introZoomTimeline.current = null;

@@ -150,7 +150,10 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--stamp); outline
 .node-label i { width: 15px; height: 1px; background: rgba(45,45,45,.35); }
 
 .intro-title { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center; pointer-events: none; transform-origin: center; opacity: 0; }
-.intro-title span { color: var(--ink); font: 400 clamp(34px, 5vw, 66px)/1.1 var(--serif); letter-spacing: -.045em; white-space: nowrap; }
+.intro-line { color: var(--ink); font: 400 clamp(34px, 5vw, 66px)/1.1 var(--serif); letter-spacing: -.045em; white-space: pre; }
+.intro-letter { position: relative; display: inline-block; }
+.intro-glyph { display: inline-block; transform-origin: 50% 70%; }
+.intro-dot { position: absolute; left: 50%; top: 58%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: #070707; filter: blur(.6px); opacity: 0; }
 .skip-intro { position: absolute; right: 5.2vw; bottom: 34px; z-index: 10; display: inline-flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px; border: 1px solid rgba(45,45,45,.35); background: rgba(249,248,246,.6); color: #57524d; font: 10px var(--mono); letter-spacing: .12em; transition: color .2s, border-color .2s; }
 .skip-intro span { color: var(--stamp); font: 13px var(--sans); }
 .skip-intro:hover { color: var(--ink); border-color: var(--ink); }
