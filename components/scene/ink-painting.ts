@@ -392,6 +392,81 @@ export function paintLandscapeLayer(layer: LandscapeLayerSpec) {
   return toCoverageTexture(canvas);
 }
 
+// Pine needles as painted in Korean ink work: fans of fine tapering strokes from one point (송엽).
+// A 2×2 atlas: three fans (symmetric, leaning left, leaning right) and one full wheel (차륜형).
+// Fans have their base at the bottom of the tile; the wheel is centred.
+export function paintNeedleAtlas() {
+  const size = 1024;
+  const tile = size / 2;
+  const { canvas, context } = createCoverageCanvas(size, size);
+  const variants = [
+    { from: -95, to: 95, wheel: false },
+    { from: -115, to: 60, wheel: false },
+    { from: -60, to: 115, wheel: false },
+    { from: -180, to: 180, wheel: true },
+  ];
+
+  variants.forEach((variant, index) => {
+    const random = createRandom(401 + index * 37);
+    // CanvasTexture flips Y, so atlas row 0 is the bottom half of the canvas.
+    const originX = (index % 2) * tile;
+    const originY = (1 - Math.floor(index / 2)) * tile;
+    const baseX = originX + tile / 2;
+    const baseY = originY + (variant.wheel ? tile / 2 : tile * 0.9);
+    // Few, bold strokes: at screen size a fan is only ~50px across, so fine needles would vanish.
+    const count = variant.wheel ? 24 : 15 + Math.floor(random() * 5);
+    for (let needle = 0; needle < count; needle++) {
+      const along = count === 1 ? 0.5 : needle / (count - 1);
+      const degrees = THREE.MathUtils.lerp(variant.from, variant.to, along) + (random() - 0.5) * 8;
+      const angle = THREE.MathUtils.degToRad(degrees);
+      const sideFalloff = variant.wheel ? 1 : 0.72 + 0.28 * Math.cos(angle);
+      const length = tile * (variant.wheel ? 0.34 + random() * 0.08 : 0.32 + random() * 0.12) * sideFalloff;
+      const directionX = Math.sin(angle);
+      const directionY = -Math.cos(angle);
+      const startRadius = tile * 0.018;
+      const startX = baseX + directionX * startRadius;
+      const startY = baseY + directionY * startRadius;
+      const tipX = baseX + directionX * length;
+      const tipY = baseY + directionY * length;
+      const bend = (random() - 0.5) * length * 0.12;
+      const controlX = (startX + tipX) / 2 - directionY * bend;
+      const controlY = (startY + tipY) / 2 + directionX * bend;
+      const halfWidth = tile * (0.013 + random() * 0.006);
+      context.fillStyle = ink(0.82 + random() * 0.18);
+      context.beginPath();
+      context.moveTo(startX - directionY * halfWidth, startY + directionX * halfWidth);
+      context.quadraticCurveTo(controlX, controlY, tipX, tipY);
+      context.quadraticCurveTo(controlX, controlY, startX + directionY * halfWidth, startY - directionX * halfWidth);
+      context.closePath();
+      context.fill();
+    }
+    context.fillStyle = ink(0.95);
+    dab(context, baseX, baseY, tile * 0.022, tile * 0.016, 0);
+  });
+
+  return toCoverageTexture(canvas);
+}
+
+// The soft grey cloud of diluted ink (담묵) laid under each needle pad.
+export function paintWashCloud() {
+  const size = 256;
+  const { canvas, context } = createCoverageCanvas(size, size);
+  const random = createRandom(733);
+  for (let lobe = 0; lobe < 9; lobe++) {
+    const x = size * (0.28 + random() * 0.44);
+    const y = size * (0.4 + random() * 0.22);
+    const radius = size * (0.16 + random() * 0.14);
+    const gradient = context.createRadialGradient(x, y, 0, x, y, radius);
+    gradient.addColorStop(0, ink(0.55));
+    gradient.addColorStop(0.6, ink(0.3));
+    gradient.addColorStop(1, ink(0));
+    context.fillStyle = gradient;
+    context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  }
+  addPaperGrain(context, size, size, 733, 0.25);
+  return toCoverageTexture(canvas);
+}
+
 export function paintMistBand(seed: number) {
   const width = 1024;
   const height = 256;

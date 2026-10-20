@@ -7,9 +7,32 @@ import { Html, useScroll } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { portfolioEntries } from "@/content/portfolio";
 import type { IntroTimeline } from "./intro";
-import { createBrushAlphaTexture, type PineGeometry } from "./pine-geometry";
-import { createBrushStrokeMaterial, createSumiToonMaterial } from "./pine-materials";
+import { paintNeedleAtlas, paintWashCloud } from "./ink-painting";
+import type { FoliageSprite, PineGeometry } from "./pine-geometry";
+import { createFoliageMaterial, createInkTrunkMaterial } from "./pine-materials";
 import type { PortfolioNode } from "./types";
+
+// One upright sprite per needle fan or wash cloud; the vertex shader turns each to face the camera.
+function createFoliageMesh(sprites: FoliageSprite[], material: THREE.ShaderMaterial, renderOrder: number) {
+  const geometry = new THREE.PlaneGeometry(1, 1);
+  const attribute = (pick: (sprite: FoliageSprite) => number) =>
+    new THREE.InstancedBufferAttribute(new Float32Array(sprites.map(pick)), 1);
+  geometry.setAttribute("aVariant", attribute((sprite) => sprite.variant));
+  geometry.setAttribute("aTone", attribute((sprite) => sprite.tone));
+  geometry.setAttribute("aTilt", attribute((sprite) => sprite.tilt));
+  const mesh = new THREE.InstancedMesh(geometry, material, sprites.length);
+  const matrix = new THREE.Matrix4();
+  const rotation = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  sprites.forEach((sprite, index) => {
+    mesh.setMatrixAt(index, matrix.compose(sprite.position, rotation, scale.set(sprite.width, sprite.height, 1)));
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.frustumCulled = false;
+  mesh.renderOrder = renderOrder;
+  mesh.raycast = () => {};
+  return mesh;
+}
 
 export function createPortfolioNodes(geometry: PineGeometry): PortfolioNode[] {
   return portfolioEntries.map((node) => {
@@ -38,71 +61,56 @@ export function PineTree({
 }) {
   const [visibleNodeStage, setVisibleNodeStage] = useState<"branches" | "roots" | null>(null);
   const shownNodeStage = useRef<"branches" | "roots" | null>(null);
-  const brushMesh = useRef<THREE.InstancedMesh>(null);
-  const matricesReady = useRef(false);
   const scroll = useScroll();
-  const brushTexture = useMemo(() => createBrushAlphaTexture(), []);
-  const brushPlane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
-  const brushMaterial = useMemo(() => createBrushStrokeMaterial(brushTexture), [brushTexture]);
-  const structureMaterial = useMemo(() => createSumiToonMaterial(0.04, 0.55, 0), []);
-  const foliageMaterial = useMemo(() => createSumiToonMaterial(0.16, 0.38, 1), []);
-  const brushDummy = useMemo(() => new THREE.Object3D(), []);
-  const brushRoll = useMemo(() => new THREE.Quaternion(), []);
-  const brushAxis = useMemo(() => new THREE.Vector3(0, 0, 1), []);
-  const previousCameraRotation = useMemo(() => new THREE.Quaternion(0, 0, 0, 0), []);
+  const structureMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.28, noiseStrength: 0.55, windStrength: 0 }), []);
+  const canopyMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.34, noiseStrength: 0.38, windStrength: 1 }), []);
+  const needleAtlas = useMemo(() => paintNeedleAtlas(), []);
+  const washTexture = useMemo(() => paintWashCloud(), []);
+  const needleMesh = useMemo(
+    () => createFoliageMesh(geometry.needles, createFoliageMaterial(needleAtlas, { atlas: true, opacity: 1 }), 3),
+    [geometry, needleAtlas],
+  );
+  const washMesh = useMemo(
+    () => createFoliageMesh(geometry.washes, createFoliageMaterial(washTexture, { atlas: false, opacity: 1 }), 2),
+    [geometry, washTexture],
+  );
+  const foliageMaterials = [needleMesh.material, washMesh.material] as THREE.ShaderMaterial[];
 
   useEffect(() => () => {
     geometry.structure.dispose();
     geometry.canopy.dispose();
-    brushTexture.dispose();
-    brushPlane.dispose();
-    brushMaterial.dispose();
     structureMaterial.dispose();
-    foliageMaterial.dispose();
-  }, [brushMaterial, brushPlane, brushTexture, foliageMaterial, geometry, structureMaterial]);
+    canopyMaterial.dispose();
+    needleAtlas.dispose();
+    washTexture.dispose();
+    for (const mesh of [needleMesh, washMesh]) {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+      mesh.dispose();
+    }
+  }, [canopyMaterial, geometry, needleAtlas, needleMesh, structureMaterial, washMesh, washTexture]);
 
-  useFrame(({ camera, clock }) => {
+  useFrame(({ clock }) => {
     const windTime = clock.elapsedTime;
-    structureMaterial.uniforms.uProgress.value = intro.progress;
-    structureMaterial.uniforms.uFogDensity.value = intro.fogDensity;
-    structureMaterial.uniforms.uTime.value = windTime;
-    foliageMaterial.uniforms.uProgress.value = intro.progress;
-    foliageMaterial.uniforms.uFogDensity.value = intro.fogDensity;
-    foliageMaterial.uniforms.uTime.value = windTime;
-    brushMaterial.uniforms.uProgress.value = intro.progress;
-    brushMaterial.uniforms.uFogDensity.value = intro.fogDensity;
-    brushMaterial.uniforms.uTime.value = windTime;
+    for (const material of [structureMaterial, canopyMaterial, ...foliageMaterials]) {
+      material.uniforms.uProgress.value = intro.progress;
+      material.uniforms.uFogDensity.value = intro.fogDensity;
+      material.uniforms.uTime.value = windTime;
+    }
     // Dots are mounted only for the chapter in view: drei's Html labels ignore a hidden parent group.
     const nodeStage = scroll.offset < 0.37 ? "branches" : scroll.offset > 0.63 ? "roots" : null;
     if (nodeStage !== shownNodeStage.current) {
       shownNodeStage.current = nodeStage;
       setVisibleNodeStage(nodeStage);
     }
-
-    if (brushMesh.current && (!matricesReady.current || camera.quaternion.angleTo(previousCameraRotation) > 0.0005)) {
-      geometry.foliage.forEach((stroke, index) => {
-        brushDummy.position.copy(stroke.position);
-        brushRoll.setFromAxisAngle(brushAxis, stroke.rotation);
-        brushDummy.quaternion.copy(camera.quaternion).multiply(brushRoll);
-        brushDummy.scale.set(stroke.width, stroke.height, 1);
-        brushDummy.updateMatrix();
-        brushMesh.current?.setMatrixAt(index, brushDummy.matrix);
-      });
-      brushMesh.current.instanceMatrix.needsUpdate = true;
-      previousCameraRotation.copy(camera.quaternion);
-      matricesReady.current = true;
-    }
   });
 
   return (
     <group position={[1.45, -2.8, 0]}>
       <mesh geometry={geometry.structure} material={structureMaterial} />
-      <mesh geometry={geometry.canopy} material={foliageMaterial} />
-      <instancedMesh
-        ref={brushMesh}
-        args={[brushPlane, brushMaterial, geometry.foliage.length]}
-        frustumCulled={false}
-      />
+      <mesh geometry={geometry.canopy} material={canopyMaterial} />
+      <primitive object={washMesh} />
+      <primitive object={needleMesh} />
 
       {nodesReady && visibleNodeStage && nodes.filter((node) => node.stage === visibleNodeStage).map((node) => (
         <GlowNode
