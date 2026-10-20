@@ -6,15 +6,20 @@ import { useScroll } from "@react-three/drei";
 import { gsap } from "gsap";
 import { useEffect, useMemo, useRef } from "react";
 import type { StageName } from "@/content/portfolio";
+import { computeFraming, type ScreenRect } from "./framing";
 import type { IntroTimeline } from "./intro";
 import { smoothStep } from "./math";
 import type { PortfolioNode } from "./types";
 
+const treeOrigin = new THREE.Vector3(1.45, -2.8, 0);
+
 export function CameraController({
   intro,
+  nodes,
   onIntroComplete,
   onAboutTextReveal,
   aboutTextRef,
+  chapterTextRef,
   onStageChange,
   selectedNode,
   onSelectNode,
@@ -22,9 +27,11 @@ export function CameraController({
   reducedMotion,
 }: {
   intro: IntroTimeline;
+  nodes: PortfolioNode[];
   onIntroComplete: () => void;
   onAboutTextReveal: () => void;
   aboutTextRef: { current: HTMLElement | null };
+  chapterTextRef: { current: HTMLElement | null };
   onStageChange: (stage: StageName) => void;
   selectedNode: PortfolioNode | null;
   onSelectNode: (node: PortfolioNode | null) => void;
@@ -46,6 +53,13 @@ export function CameraController({
   const focusedTarget = useMemo(() => new THREE.Vector3(), []);
   const cameraPosition = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
+  const framing = useMemo(() => new THREE.Vector3(), []);
+  const textRects = useRef<Partial<Record<StageName, ScreenRect>>>({});
+  const lastTextMeasure = useRef(-1);
+  const stagePoints = useMemo(() => ({
+    branches: nodes.filter((node) => node.stage === "branches").map((node) => new THREE.Vector3(...node.position).add(treeOrigin)),
+    roots: nodes.filter((node) => node.stage === "roots").map((node) => new THREE.Vector3(...node.position).add(treeOrigin)),
+  }), [nodes]);
 
   useEffect(() => () => {
     introZoomTimeline.current?.kill();
@@ -77,7 +91,7 @@ export function CameraController({
     };
   }, [onConnectScroll, reducedMotion, scroll.el]);
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera, gl, size, clock }, delta) => {
     // Keep Drei's offset synchronized with its actual scroll element so both
     // wheel input and menu-driven scrollTo calls feed this camera controller.
     scroll.offset = rawScrollOffset.current;
@@ -137,8 +151,41 @@ export function CameraController({
     const trunkZoom = intro.cameraZoom * trunkProximity;
     const cameraX = 1.48;
     const cameraZ = THREE.MathUtils.lerp(14.2, 1.85, trunkZoom);
-    baseCamera.set(cameraX, cameraY, cameraZ);
-    baseTarget.set(cameraX, THREE.MathUtils.lerp(cameraY, 1.45, trunkZoom), 0);
+
+    // In the canopy and roots views, pan and pull back so no dot sits under the chapter text.
+    const textElement = chapterTextRef.current;
+    if (textElement && clock.elapsedTime - lastTextMeasure.current > 0.25) {
+      lastTextMeasure.current = clock.elapsedTime;
+      const measuredStage = (["branches", "roots"] as const).find((name) => textElement.classList.contains(`chapter-${name}`));
+      if (measuredStage) {
+        const rect = textElement.getBoundingClientRect();
+        const canvasRect = gl.domElement.getBoundingClientRect();
+        textRects.current[measuredStage] = {
+          left: rect.left - canvasRect.left,
+          top: rect.top - canvasRect.top,
+          right: rect.right - canvasRect.left,
+          bottom: rect.bottom - canvasRect.top,
+        };
+      }
+    }
+    const framingTarget = stage === "trunk" || !intro.complete
+      ? { x: 0, y: 0, z: 0 }
+      : computeFraming({
+        points: stagePoints[stage],
+        cameraX,
+        cameraY,
+        cameraZ: 14.2,
+        fov: (camera as THREE.PerspectiveCamera).fov,
+        width: size.width,
+        height: size.height,
+        textRect: textRects.current[stage] ?? null,
+      });
+    framing.x = THREE.MathUtils.damp(framing.x, framingTarget.x, 3, delta);
+    framing.y = THREE.MathUtils.damp(framing.y, framingTarget.y, 3, delta);
+    framing.z = THREE.MathUtils.damp(framing.z, framingTarget.z, 3, delta);
+
+    baseCamera.set(cameraX + framing.x, cameraY + framing.y, cameraZ + framing.z);
+    baseTarget.set(cameraX + framing.x, THREE.MathUtils.lerp(cameraY, 1.45, trunkZoom) + framing.y, 0);
     cameraPosition.copy(baseCamera);
     lookTarget.copy(baseTarget);
 

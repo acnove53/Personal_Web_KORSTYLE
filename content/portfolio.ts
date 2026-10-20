@@ -23,19 +23,23 @@ export const contact: {
   ],
 };
 
-export const stageCopy: Record<StageName, { chapter: string; title: string; note: string }> = {
+// mark: 上 (top), 中 (middle), 下 (bottom) — where each chapter sits on the tree.
+export const stageCopy: Record<StageName, { mark: string; chapter: string; title: string; note: string }> = {
   branches: {
-    chapter: "04 / CANOPY",
+    mark: "上",
+    chapter: "CANOPY",
     title: "Ideas take shape.",
     note: "Selected work · five projects grown from the same root system.",
   },
   trunk: {
-    chapter: "03 / TRUNK",
+    mark: "中",
+    chapter: "TRUNK",
     title: "Jinyoung Daniel Jeon",
     note: "Bridging the gap between hardware and intelligence.",
   },
   roots: {
-    chapter: "02 / ROOTS",
+    mark: "下",
+    chapter: "ROOTS",
     title: "Built on understanding.",
     note: "Experience · the people, systems, and disciplines beneath the work.",
   },

@@ -4,37 +4,43 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { Html, useScroll } from "@react-three/drei";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { portfolioEntries } from "@/content/portfolio";
 import type { IntroTimeline } from "./intro";
-import { buildPineGeometry, createBrushAlphaTexture, type PineGeometry } from "./pine-geometry";
+import { createBrushAlphaTexture, type PineGeometry } from "./pine-geometry";
 import { createBrushStrokeMaterial, createSumiToonMaterial } from "./pine-materials";
 import type { PortfolioNode } from "./types";
 
-export function PineTree({
-  intro,
-  nodesReady,
-  selectedNode,
-  onSelectNode,
-}: {
-  intro: IntroTimeline;
-  nodesReady: boolean;
-  selectedNode: PortfolioNode | null;
-  onSelectNode: (node: PortfolioNode | null) => void;
-}) {
-  const branchNodes = useRef<THREE.Group>(null);
-  const rootNodes = useRef<THREE.Group>(null);
-  const brushMesh = useRef<THREE.InstancedMesh>(null);
-  const matricesReady = useRef(false);
-  const scroll = useScroll();
-  const geometry = useMemo<PineGeometry>(() => buildPineGeometry(), []);
-  const nodes = useMemo<PortfolioNode[]>(() => portfolioEntries.map((node) => {
+export function createPortfolioNodes(geometry: PineGeometry): PortfolioNode[] {
+  return portfolioEntries.map((node) => {
     const anchor = geometry.nodePositions[node.id];
     return {
       ...node,
       position: [anchor.x, anchor.y, anchor.z] as [number, number, number],
     };
-  }), [geometry]);
+  });
+}
+
+export function PineTree({
+  intro,
+  geometry,
+  nodes,
+  nodesReady,
+  selectedNode,
+  onSelectNode,
+}: {
+  intro: IntroTimeline;
+  geometry: PineGeometry;
+  nodes: PortfolioNode[];
+  nodesReady: boolean;
+  selectedNode: PortfolioNode | null;
+  onSelectNode: (node: PortfolioNode | null) => void;
+}) {
+  const [visibleNodeStage, setVisibleNodeStage] = useState<"branches" | "roots" | null>(null);
+  const shownNodeStage = useRef<"branches" | "roots" | null>(null);
+  const brushMesh = useRef<THREE.InstancedMesh>(null);
+  const matricesReady = useRef(false);
+  const scroll = useScroll();
   const brushTexture = useMemo(() => createBrushAlphaTexture(), []);
   const brushPlane = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const brushMaterial = useMemo(() => createBrushStrokeMaterial(brushTexture), [brushTexture]);
@@ -66,14 +72,11 @@ export function PineTree({
     brushMaterial.uniforms.uProgress.value = intro.progress;
     brushMaterial.uniforms.uFogDensity.value = intro.fogDensity;
     brushMaterial.uniforms.uTime.value = windTime;
-    for (const [group, visible] of [
-      [branchNodes.current, scroll.offset < 0.37],
-      [rootNodes.current, scroll.offset > 0.63],
-    ] as const) {
-      if (!group) continue;
-      // A hidden node never receives pointer-out, so clear the hover cursor it may have set.
-      if (group.visible && !visible) document.body.style.cursor = "";
-      group.visible = visible;
+    // Dots are mounted only for the chapter in view: drei's Html labels ignore a hidden parent group.
+    const nodeStage = scroll.offset < 0.37 ? "branches" : scroll.offset > 0.63 ? "roots" : null;
+    if (nodeStage !== shownNodeStage.current) {
+      shownNodeStage.current = nodeStage;
+      setVisibleNodeStage(nodeStage);
     }
 
     if (brushMesh.current && (!matricesReady.current || camera.quaternion.angleTo(previousCameraRotation) > 0.0005)) {
@@ -101,30 +104,14 @@ export function PineTree({
         frustumCulled={false}
       />
 
-      {nodesReady && (
-        <>
-          <group ref={branchNodes} visible={scroll.offset < 0.37}>
-            {nodes.filter((node) => node.stage === "branches").map((node) => (
-              <GlowNode
-                key={node.id}
-                node={node}
-                active={selectedNode?.id === node.id}
-                onClick={() => onSelectNode(node)}
-              />
-            ))}
-          </group>
-          <group ref={rootNodes} visible={scroll.offset > 0.63}>
-            {nodes.filter((node) => node.stage === "roots").map((node) => (
-              <GlowNode
-                key={node.id}
-                node={node}
-                active={selectedNode?.id === node.id}
-                onClick={() => onSelectNode(node)}
-              />
-            ))}
-          </group>
-        </>
-      )}
+      {nodesReady && visibleNodeStage && nodes.filter((node) => node.stage === visibleNodeStage).map((node) => (
+        <GlowNode
+          key={node.id}
+          node={node}
+          active={selectedNode?.id === node.id}
+          onClick={() => onSelectNode(node)}
+        />
+      ))}
     </group>
   );
 }

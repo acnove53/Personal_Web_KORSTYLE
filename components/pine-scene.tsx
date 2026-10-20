@@ -6,9 +6,10 @@ import { ScrollControls } from "@react-three/drei";
 import { useCallback, useMemo, useState } from "react";
 import type { StageName } from "@/content/portfolio";
 import { CameraController } from "@/components/scene/camera-controller";
-import { createIntroTimeline, ImpactSplash, IntroSequence, SeedParticle } from "@/components/scene/intro";
+import { createIntroTimeline, ImpactSplash, IntroSequence, SeedParticle, type IntroTimeline } from "@/components/scene/intro";
 import { InkLandscape } from "@/components/scene/landscape";
-import { PineTree } from "@/components/scene/pine-tree";
+import { buildPineGeometry } from "@/components/scene/pine-geometry";
+import { createPortfolioNodes, PineTree } from "@/components/scene/pine-tree";
 import type { PortfolioNode } from "@/components/scene/types";
 
 export type { PortfolioNode } from "@/components/scene/types";
@@ -24,6 +25,7 @@ type PineSceneProps = {
   reducedMotion: boolean;
   introTitleRef: { current: HTMLDivElement | null };
   aboutTextRef: { current: HTMLElement | null };
+  chapterTextRef: { current: HTMLElement | null };
 };
 
 export function PineScene({
@@ -37,6 +39,7 @@ export function PineScene({
   reducedMotion,
   introTitleRef,
   aboutTextRef,
+  chapterTextRef,
 }: PineSceneProps) {
   const [nodesReady, setNodesReady] = useState(false);
   const handleIntroComplete = useCallback(() => {
@@ -70,20 +73,77 @@ export function PineScene({
         />
       </EffectComposer>
       <ScrollControls pages={3} damping={0.16} maxSpeed={0.9} distance={1}>
-        <CameraController
+        <TreeWithCamera
           intro={intro}
+          nodesReady={nodesReady}
           onIntroComplete={handleIntroComplete}
           onAboutTextReveal={onAboutTextReveal}
           aboutTextRef={aboutTextRef}
+          chapterTextRef={chapterTextRef}
           onStageChange={onStageChange}
           selectedNode={selectedNode}
           onSelectNode={onSelectNode}
           onConnectScroll={onConnectScroll}
           reducedMotion={reducedMotion}
         />
-        <InkLandscape intro={intro} reducedMotion={reducedMotion} />
-        <PineTree intro={intro} nodesReady={nodesReady} selectedNode={selectedNode} onSelectNode={onSelectNode} />
       </ScrollControls>
     </Canvas>
+  );
+}
+
+// Lives inside the Canvas so the tree geometry is only built in the browser, never during server rendering.
+function TreeWithCamera({
+  intro,
+  nodesReady,
+  onIntroComplete,
+  onAboutTextReveal,
+  aboutTextRef,
+  chapterTextRef,
+  onStageChange,
+  selectedNode,
+  onSelectNode,
+  onConnectScroll,
+  reducedMotion,
+}: {
+  intro: IntroTimeline;
+  nodesReady: boolean;
+  onIntroComplete: () => void;
+  onAboutTextReveal: () => void;
+  aboutTextRef: { current: HTMLElement | null };
+  chapterTextRef: { current: HTMLElement | null };
+  onStageChange: (stage: StageName) => void;
+  selectedNode: PortfolioNode | null;
+  onSelectNode: (node: PortfolioNode | null) => void;
+  onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
+  reducedMotion: boolean;
+}) {
+  const geometry = useMemo(() => buildPineGeometry(), []);
+  const nodes = useMemo(() => createPortfolioNodes(geometry), [geometry]);
+
+  return (
+    <>
+      <CameraController
+        intro={intro}
+        nodes={nodes}
+        onIntroComplete={onIntroComplete}
+        onAboutTextReveal={onAboutTextReveal}
+        aboutTextRef={aboutTextRef}
+        chapterTextRef={chapterTextRef}
+        onStageChange={onStageChange}
+        selectedNode={selectedNode}
+        onSelectNode={onSelectNode}
+        onConnectScroll={onConnectScroll}
+        reducedMotion={reducedMotion}
+      />
+      <InkLandscape intro={intro} reducedMotion={reducedMotion} />
+      <PineTree
+        intro={intro}
+        geometry={geometry}
+        nodes={nodes}
+        nodesReady={nodesReady}
+        selectedNode={selectedNode}
+        onSelectNode={onSelectNode}
+      />
+    </>
   );
 }

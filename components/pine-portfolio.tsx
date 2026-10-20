@@ -12,10 +12,10 @@ import {
   type StageName,
 } from "@/content/portfolio";
 
-const stageOrder: { stage: StageName; number: string; label: string }[] = [
-  { stage: "branches", number: "04", label: "Projects" },
-  { stage: "trunk", number: "03", label: "About" },
-  { stage: "roots", number: "02", label: "Experience" },
+const stageOrder: { stage: StageName; label: string }[] = [
+  { stage: "branches", label: "Projects" },
+  { stage: "trunk", label: "About" },
+  { stage: "roots", label: "Experience" },
 ];
 
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -73,6 +73,7 @@ class SceneErrorBoundary extends Component<{ onError: () => void; children: Reac
 export function PinePortfolio() {
   const introTitleRef = useRef<HTMLDivElement>(null);
   const aboutTextRef = useRef<HTMLElement>(null);
+  const chapterTextRef = useRef<HTMLElement>(null);
   const [stage, setStage] = useState<StageName>("trunk");
   const [selected, setSelected] = useState<PortfolioNode | null>(null);
   const [scrollToStage, setScrollToStage] = useState<((stage: StageName) => void) | null>(null);
@@ -128,6 +129,7 @@ export function PinePortfolio() {
                 reducedMotion={reducedMotion}
                 introTitleRef={introTitleRef}
                 aboutTextRef={aboutTextRef}
+                chapterTextRef={chapterTextRef}
               />
             </SceneErrorBoundary>
           </div>
@@ -173,7 +175,7 @@ export function PinePortfolio() {
               onClick={() => scrollToStage?.(item.stage)}
               aria-current={stage === item.stage ? "step" : undefined}
             >
-              <span className="stage-link-number">{item.number}</span>
+              <span className="stage-link-number" aria-hidden="true">{stageCopy[item.stage].mark}</span>
               <span className="stage-link-name">{item.label}</span>
               <span className="stage-link-dot" />
             </button>
@@ -196,6 +198,7 @@ export function PinePortfolio() {
           {sceneReady && !selected && stage !== "trunk" && (
             <motion.section
               key={stage}
+              ref={chapterTextRef}
               className={`chapter-intro chapter-${stage}`}
               initial={{ opacity: 0, y: 12, filter: "blur(8px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -256,7 +259,12 @@ function ChapterContent({ stage, scrollToStage }: {
 }) {
   return (
     <>
-      <p className="eyebrow"><span className="eyebrow-seal" aria-hidden="true">•</span>{stageCopy[stage].chapter}</p>
+      <p className="eyebrow">
+        <span className="eyebrow-seal" aria-hidden="true">•</span>
+        <span className="eyebrow-mark" aria-hidden="true">{stageCopy[stage].mark}</span>
+        <span aria-hidden="true">/</span>
+        {stageCopy[stage].chapter}
+      </p>
       <h1>{stage === "trunk" ? <>Jinyoung<br />Daniel Jeon<span className="title-period">.</span></> : stageCopy[stage].title}</h1>
       <p className="chapter-tagline">{stageCopy[stage].note}</p>
       {stage === "trunk" ? (

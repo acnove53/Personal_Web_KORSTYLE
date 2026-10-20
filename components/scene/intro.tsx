@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
 import { useEffect, useMemo, useRef } from "react";
+import { createContactShadowMaterial, createGlossyInkMaterial } from "./ink-drop-material";
 import { seedUnit, smoothStep } from "./math";
 
 export type IntroTimeline = {
@@ -36,10 +37,20 @@ export type IntroTimeline = {
     scaleZ: number;
     opacity: number;
     visible: boolean;
+    // 1 = hanging drop with a neck, 0 = free round drop.
+    pinch: number;
+    // Extra vertical stretch while the drop hangs under its own weight.
+    sag: number;
+    // 0..1 progress through the fall, used for the settling wobble.
+    fall: number;
   };
+  satellite: { y: number; scale: number; visible: boolean };
 };
 
 const introSproutDuration = 3;
+const dropFallDuration = 1.08;
+const seedStart = { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false, pinch: 0.8, sag: 1, fall: 0 };
+const satelliteStart = { y: 3.85, scale: 0, visible: false };
 
 export function createIntroTimeline(): IntroTimeline {
   return {
@@ -62,7 +73,8 @@ export function createIntroTimeline(): IntroTimeline {
       dropletProgress: 0,
       dropletOpacity: 0,
     },
-    seed: { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false },
+    seed: { ...seedStart },
+    satellite: { ...satelliteStart },
   };
 }
 
@@ -96,7 +108,8 @@ export function IntroSequence({ intro, titleRef, skip }: {
       dropletProgress: 0,
       dropletOpacity: 0,
     });
-    Object.assign(intro.seed, { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false });
+    Object.assign(intro.seed, seedStart);
+    Object.assign(intro.satellite, satelliteStart);
     gsap.set(title, { opacity: 0, scale: 0.94, filter: "blur(12px)" });
 
     const timeline = gsap.timeline();
@@ -111,21 +124,35 @@ export function IntroSequence({ intro, titleRef, skip }: {
       ease: "power2.in",
       onStart: () => { intro.phase = "seed"; },
     });
+    // The drop swells while hanging from a thinning neck, sagging under its weight.
     timeline.to(intro.seed, {
       scaleX: 1,
       scaleY: 1,
       scaleZ: 1,
       opacity: 1,
+      pinch: 1,
+      sag: 1.14,
       duration: 0.56,
       ease: "power2.out",
       onStart: () => { intro.seed.visible = true; },
     }, "<+=0.12");
+    timeline.addLabel("release");
+    // The neck snaps: the drop rounds out, and the broken neck becomes a small satellite droplet.
+    timeline.to(intro.seed, { pinch: 0, sag: 1, duration: 0.14, ease: "power3.out" }, "release");
+    timeline.set(intro.satellite, { y: 3.85 + 0.3, scale: 1, visible: true }, "release+=0.04");
+    timeline.to(intro.satellite, {
+      y: 0.02,
+      duration: dropFallDuration + 0.06,
+      ease: "power2.in",
+      onComplete: () => { intro.satellite.visible = false; },
+    }, "release+=0.04");
     timeline.to(intro.seed, {
       y: 0,
-      duration: 1.08,
+      fall: 1,
+      duration: dropFallDuration,
       ease: "power2.in",
       onStart: () => { intro.phase = "drop"; },
-    });
+    }, "release");
     timeline.call(() => {
       intro.phase = "splash";
       Object.assign(intro.splash, {
@@ -140,8 +167,8 @@ export function IntroSequence({ intro, titleRef, skip }: {
         dropletProgress: 0,
         dropletOpacity: 1,
       });
-    });
-    timeline.addLabel("impact");
+    }, undefined, `release+=${dropFallDuration}`);
+    timeline.addLabel("impact", `release+=${dropFallDuration}`);
     timeline.to(intro.seed, {
       scaleX: 1.55,
       scaleY: 0.045,
@@ -222,6 +249,7 @@ export function IntroSequence({ intro, titleRef, skip }: {
     timelineRef.current = null;
     if (titleRef.current) gsap.set(titleRef.current, { opacity: 0 });
     intro.seed.visible = false;
+    intro.satellite.visible = false;
     intro.splash.active = false;
     intro.elapsed = introSproutDuration;
     intro.phase = "complete";
@@ -257,46 +285,94 @@ export function IntroSequence({ intro, titleRef, skip }: {
 
 export function SeedParticle({ intro }: { intro: IntroTimeline }) {
   const seedRef = useRef<THREE.Mesh>(null);
+  const satelliteRef = useRef<THREE.Mesh>(null);
+  const shadowRef = useRef<THREE.Mesh>(null);
   const geometry = useMemo(() => {
-    const seedGeometry = new THREE.SphereGeometry(0.14, 36, 28);
+    const seedGeometry = new THREE.SphereGeometry(0.14, 48, 36);
     const position = seedGeometry.getAttribute("position");
     for (let index = 0; index < position.count; index++) {
       const x = position.getX(index);
       const y = position.getY(index);
       const z = position.getZ(index);
-      const normalizedY = y / 0.14;
       const angle = Math.atan2(z, x);
-      const irregularity = 1
-        + Math.sin(angle * 3 + normalizedY * 4.2) * 0.045
-        + Math.cos(angle * 5 - normalizedY * 2.7) * 0.022;
-      const pulledTip = Math.pow(Math.max(normalizedY, 0), 3) * 0.12;
-      const flattenedBase = Math.pow(Math.max(-normalizedY - 0.72, 0), 2) * 0.018;
-      position.setXYZ(index, x * irregularity, y + pulledTip + flattenedBase, z * irregularity);
+      // Surface tension keeps a real drop nearly spherical; only a faint ripple of irregularity remains.
+      const irregularity = 1 + Math.sin(angle * 3 + (y / 0.14) * 4.2) * 0.012;
+      position.setXYZ(index, x * irregularity, y, z * irregularity);
     }
     position.needsUpdate = true;
     seedGeometry.computeVertexNormals();
     seedGeometry.computeBoundingSphere();
     return seedGeometry;
   }, []);
+  const satelliteGeometry = useMemo(() => new THREE.SphereGeometry(0.035, 20, 16), []);
+  const shadowGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+  const dropMaterial = useMemo(() => createGlossyInkMaterial(), []);
+  const satelliteMaterial = useMemo(() => createGlossyInkMaterial(), []);
+  const shadowMaterial = useMemo(() => createContactShadowMaterial(), []);
 
-  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => {
+    geometry.dispose();
+    satelliteGeometry.dispose();
+    shadowGeometry.dispose();
+    dropMaterial.dispose();
+    satelliteMaterial.dispose();
+    shadowMaterial.dispose();
+  }, [dropMaterial, geometry, satelliteGeometry, satelliteMaterial, shadowGeometry, shadowMaterial]);
 
   useFrame(() => {
     const seed = seedRef.current;
-    if (!seed) return;
+    const satellite = satelliteRef.current;
+    const shadow = shadowRef.current;
     const state = intro.seed;
-    seed.visible = state.visible;
-    if (!state.visible) return;
-    seed.position.set(state.x, state.y, state.z);
-    seed.scale.set(state.scaleX, state.scaleY, state.scaleZ);
-    (seed.material as THREE.MeshBasicMaterial).opacity = state.opacity;
+    if (seed) {
+      seed.visible = state.visible;
+      if (state.visible) {
+        let scaleX = state.scaleX;
+        let scaleY = state.scaleY * state.sag;
+        let scaleZ = state.scaleZ;
+        if (intro.phase === "drop") {
+          // After letting go the drop oscillates between tall and wide, settling quickly; volume is kept.
+          const time = state.fall * dropFallDuration;
+          const stretch = 1 + 0.08 * Math.exp(-3 * time) * Math.cos(Math.PI * 2 * 5 * time);
+          const side = 1 / Math.sqrt(stretch);
+          scaleY *= stretch;
+          scaleX *= side;
+          scaleZ *= side;
+        }
+        seed.position.set(state.x, state.y, state.z);
+        seed.scale.set(scaleX, scaleY, scaleZ);
+        dropMaterial.uniforms.uPinch.value = state.pinch;
+        dropMaterial.uniforms.uOpacity.value = state.opacity;
+      }
+    }
+    if (satellite) {
+      const satelliteState = intro.satellite;
+      satellite.visible = satelliteState.visible;
+      if (satelliteState.visible) {
+        satellite.position.set(state.x, satelliteState.y, state.z);
+        satellite.scale.setScalar(satelliteState.scale);
+        satelliteMaterial.uniforms.uOpacity.value = state.opacity;
+      }
+    }
+    if (shadow) {
+      // High up, the shadow is wide and faint; it tightens and darkens as the drop nears the surface.
+      const casting = state.visible && (intro.phase === "seed" || intro.phase === "drop" || intro.phase === "splash");
+      shadow.visible = casting;
+      if (casting) {
+        const height = Math.max(0, state.y);
+        const nearness = 1 - Math.min(1, height / 3.85);
+        shadow.position.set(state.x, 0.004, state.z);
+        shadow.scale.setScalar((0.1 + 0.07 * height) * 2 * Math.max(state.scaleX, 0.001));
+        shadowMaterial.uniforms.uOpacity.value = 0.34 * nearness * nearness * state.opacity;
+      }
+    }
   });
 
   return (
     <group position={[1.45, -2.8, 0]}>
-      <mesh ref={seedRef} geometry={geometry} visible={false} renderOrder={10}>
-        <meshBasicMaterial color="#000000" transparent opacity={0} depthWrite={false} fog={false} toneMapped={false} />
-      </mesh>
+      <mesh ref={shadowRef} geometry={shadowGeometry} material={shadowMaterial} rotation={[-Math.PI / 2, 0, 0]} visible={false} renderOrder={2} />
+      <mesh ref={satelliteRef} geometry={satelliteGeometry} material={satelliteMaterial} visible={false} renderOrder={10} />
+      <mesh ref={seedRef} geometry={geometry} material={dropMaterial} visible={false} renderOrder={10} />
     </group>
   );
 }
@@ -309,7 +385,7 @@ export function ImpactSplash({ intro }: { intro: IntroTimeline }) {
   const crownGeometry = useMemo(() => createCrownSheetGeometry(96), []);
   const puddleGeometry = useMemo(() => createInkPuddleGeometry(), []);
   const rippleGeometry = useMemo(() => new THREE.CircleGeometry(1, 96), []);
-  const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
+  const dropletGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
   const crownMaterial = useMemo(() => createCrownMaterial(), []);
   const puddleMaterial = useMemo(() => new THREE.MeshBasicMaterial({
     color: "#000000",
@@ -321,21 +397,15 @@ export function ImpactSplash({ intro }: { intro: IntroTimeline }) {
     fog: false,
   }), []);
   const rippleMaterial = useMemo(() => createImpactRippleMaterial(), []);
-  const dropletMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-    color: "#000000",
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    toneMapped: false,
-    fog: false,
-  }), []);
+  const dropletMaterial = useMemo(() => createGlossyInkMaterial(), []);
   const particleTransform = useMemo(() => new THREE.Object3D(), []);
   const particleLayout = useMemo(() => Array.from({ length: 64 }, (_, index) => ({
     angle: seedUnit(23, index) * Math.PI * 2,
     reach: 0.72 + seedUnit(41, index) * 1.3,
     apex: 2 + seedUnit(59, index) * 0.8,
     flightTime: 0.72 + seedUnit(67, index) * 0.46,
-    size: 0.04 + seedUnit(71, index) * 0.05,
+    // Splash droplets are a small fraction of the drop's size (radius 0.14), or they read as marbles.
+    size: 0.012 + Math.pow(seedUnit(71, index), 2) * 0.03,
   })), []);
 
   useEffect(() => () => {
@@ -405,7 +475,7 @@ export function ImpactSplash({ intro }: { intro: IntroTimeline }) {
     const mesh = droplets.current;
     if (!mesh) return;
     mesh.visible = splash.active && splash.dropletOpacity > 0.002;
-    dropletMaterial.opacity = splash.dropletOpacity;
+    dropletMaterial.uniforms.uOpacity.value = splash.dropletOpacity;
     const elapsed = THREE.MathUtils.clamp(splash.dropletProgress, 0, 1) * 1.1;
     particleLayout.forEach((particle, index) => {
       const particleProgress = THREE.MathUtils.clamp(elapsed / particle.flightTime, 0, 1);

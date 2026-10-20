@@ -180,7 +180,13 @@ export function InkLandscape({ intro, reducedMotion }: { intro: IntroTimeline; r
       const halfHeight = (camera.position.z - sunZ) * tanHalfFov;
       const halfWidth = halfHeight * perspective.aspect;
       const radius = halfHeight * 0.095;
-      sun.position.set(camera.position.x + halfWidth * 0.42, camera.position.y + halfHeight * 0.5, sunZ);
+      // On portrait screens the chapter text fills the top, so the sun sits lower, between text and tree.
+      const portrait = perspective.aspect < 1;
+      sun.position.set(
+        camera.position.x + halfWidth * (portrait ? 0.5 : 0.42),
+        camera.position.y + halfHeight * (portrait ? 0.3 : 0.5),
+        sunZ,
+      );
       sun.scale.setScalar((radius * 2) / 0.86);
       sunMaterial.uniforms.uOpacity.value = reveal * 0.94;
     }
