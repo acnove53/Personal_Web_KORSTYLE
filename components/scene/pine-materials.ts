@@ -75,7 +75,7 @@ float inkReveal(vec3 worldPosition, vec3 normal, float localY, float progress) {
 export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { wash: number; noiseStrength: number; windStrength: number }) {
   return new THREE.ShaderMaterial({
     uniforms: {
-      uInk: { value: new THREE.Color("#0b0b0a") },
+      uInk: { value: new THREE.Color("#050505") },
       uPaper: { value: new THREE.Color("#f9f8f6") },
       uLight: { value: new THREE.Vector3(-6, 9, 8).normalize() },
       uFogDensity: { value: 0.24 },
@@ -92,6 +92,8 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
       attribute float aCellsAround;
       attribute float aCellsAlong;
       attribute float aFade;
+      attribute float aGroove;
+      attribute float aTwist;
       uniform float uNoiseStrength;
       uniform float uTime;
       uniform float uWindStrength;
@@ -107,6 +109,8 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
       varying float vRadius;
       varying vec2 vCells;
       varying float vFade;
+      varying float vGroove;
+      varying float vTwist;
 
       ${noiseGlsl}
 
@@ -135,6 +139,8 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
         vRadius = aRoughness;
         vCells = vec2(aCellsAround, aCellsAlong);
         vFade = aFade;
+        vGroove = aGroove;
+        vTwist = aTwist;
         gl_Position = projectionMatrix * viewPosition;
       }
     `,
@@ -158,6 +164,8 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
       varying float vRadius;
       varying vec2 vCells;
       varying float vFade;
+      varying float vGroove;
+      varying float vTwist;
 
       ${noiseGlsl}
       ${fbmGlsl}
@@ -171,7 +179,8 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
           viewNormal = -viewNormal;
           worldNormal = -worldNormal;
         }
-        vec2 surface = vec2(vUv.x * vCells.x, vUv.y * vCells.y);
+        // Shifting along the length by the flute twist makes the plates follow the twisting grooves.
+        vec2 surface = vec2(vUv.x * vCells.x + vUv.y * vTwist, vUv.y * vCells.y);
 
         // Wash: pale on the lit side, deeper on the shadow side, with dry streaks running along the branch.
         float shade = smoothstep(0.45, -0.55, dot(worldNormal, uLight));
@@ -179,7 +188,7 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
         float fineStreaks = noise3d(vec3(surface.x * 9.0, surface.y * 0.9, 4.1));
         // The shadow side is laid in as one brushed tone with a streaky edge, not a smooth 3D gradient.
         float shadowWash = smoothstep(0.38, 0.52, shade + (streaks - 0.5) * 0.45);
-        float ink = uWash + vWash * 0.3 + shadowWash * 0.34 + shade * 0.12 + (streaks - 0.5) * 0.18 + (fineStreaks - 0.5) * 0.1;
+        float ink = uWash + vWash * 0.3 + shadowWash * 0.45 + shade * 0.12 + (streaks - 0.5) * 0.18 + (fineStreaks - 0.5) * 0.1;
 
         // Fish-scale bark: each plate gets one crescent stroke under its centre, like overlapping scales,
         // rather than a full outline (which would read as cracked tiles).
@@ -195,8 +204,24 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
         float arcLine = 1.0 - smoothstep(0.035, 0.08 + pressure * 0.05, abs(fromLength - arcRadius));
         float below = smoothstep(-0.15, -0.65, fromCenter.y / fromLength);
         float bark = max(vBark, 0.0);
-        float scales = arcLine * below * step(0.22, cellId) * bark * smoothstep(0.02, 0.09, vRadius) * mix(0.5, 1.0, shade) * (0.65 + 0.35 * pressure);
+        float barkStrength = bark * smoothstep(0.02, 0.09, vRadius) * mix(0.6, 1.0, shade);
+        float scales = arcLine * below * step(0.22, cellId) * barkStrength * (0.65 + 0.35 * pressure);
         ink = 1.0 - (1.0 - ink) * (1.0 - scales * 0.85);
+
+        // Armor plates (거북등): dark cracks between plates, each plate darkening toward its lower rim
+        // like overlapping armor, and some plates laid in almost black.
+        float crack = 1.0 - smoothstep(0.03, 0.09 + pressure * 0.05, f2 - f1);
+        crack *= 1.0 - 0.5 * smoothstep(0.55, 0.75, noise3d(vec3(surface * vec2(2.5, 1.0), 12.0)));
+        float lowerRim = smoothstep(-0.1, -0.6, fromCenter.y / fromLength) * smoothstep(0.15, 0.45, fromLength);
+        float plate = 0.1 + 0.32 * step(0.72, cellId) + lowerRim * 0.38;
+        ink = 1.0 - (1.0 - ink) * (1.0 - plate * barkStrength);
+        ink = 1.0 - (1.0 - ink) * (1.0 - crack * 0.88 * barkStrength);
+
+        // Heavy black accents: broad patches on the shadow side and down the flute grooves.
+        float blotch = smoothstep(0.6, 0.72, fbm(vWorldPosition * 1.6 + 3.0)) * shade;
+        float grooveInk = smoothstep(0.55, 0.95, vGroove);
+        ink = 1.0 - (1.0 - ink) * (1.0 - blotch * 0.8 * step(0.4, bark));
+        ink = 1.0 - (1.0 - ink) * (1.0 - grooveInk * 0.85 * step(0.4, bark));
 
         // Moss dots on a few plates, mostly on the shadow side.
         float moss = step(0.93, cellId) * (1.0 - smoothstep(0.09, 0.16, f1)) * step(0.15, bark) * mix(0.5, 1.0, shade);
@@ -212,13 +237,15 @@ export function createInkTrunkMaterial({ wash, noiseStrength, windStrength }: { 
         // Contour: a brush line that swells and thins along the branch and breaks into flying white.
         float rim = 1.0 - abs(dot(viewNormal, normalize(vViewPosition)));
         float brushPressure = noise3d(vec3(surface.y * 0.45, 3.3, vCells.x * 0.37));
-        float edgeStart = mix(0.42, 0.24, brushPressure);
+        float edgeStart = mix(0.34, 0.18, brushPressure);
         float contour = smoothstep(edgeStart, edgeStart + 0.07, rim);
         // Flying white: the dry brush skips in streaks that run along the stroke.
         float flyingWhite = smoothstep(0.66, 0.82, noise3d(vec3(rim * 9.0, surface.y * 1.4, 8.0)));
         contour *= 1.0 - flyingWhite * 0.55;
         ink = max(ink, contour * 0.96);
 
+        // Nothing is drawn below the ground line: roots enter the soil and the boulder sits on it.
+        if (vLocalY < -0.03) discard;
         float reveal = inkReveal(vWorldPosition, viewNormal, vLocalY, uProgress);
         if (reveal < -0.025) discard;
         float wetEdge = 1.0 - smoothstep(0.015, 0.24, max(reveal, 0.0));

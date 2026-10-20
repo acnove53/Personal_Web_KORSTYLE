@@ -62,8 +62,8 @@ export function PineTree({
   const [visibleNodeStage, setVisibleNodeStage] = useState<"branches" | "roots" | null>(null);
   const shownNodeStage = useRef<"branches" | "roots" | null>(null);
   const scroll = useScroll();
-  const structureMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.28, noiseStrength: 0.55, windStrength: 0 }), []);
-  const canopyMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.34, noiseStrength: 0.38, windStrength: 1 }), []);
+  const structureMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.5, noiseStrength: 0.55, windStrength: 0 }), []);
+  const canopyMaterial = useMemo(() => createInkTrunkMaterial({ wash: 0.56, noiseStrength: 0.38, windStrength: 1 }), []);
   const needleAtlas = useMemo(() => paintNeedleAtlas(), []);
   const washTexture = useMemo(() => paintWashCloud(), []);
   const needleMesh = useMemo(

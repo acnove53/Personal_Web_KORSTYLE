@@ -113,7 +113,10 @@ export function CameraController({
 
     // The center page is the trunk; offset 0 is the canopy and 1 is the roots.
     // Camera Y is assigned directly from ScrollControls every frame.
-    const cameraY = THREE.MathUtils.lerp(4.5, -2.4, offset);
+    // Piecewise so the trunk view (offset 0.5) stays at 1.05, where the intro and About zoom line up.
+    const cameraY = offset < 0.5
+      ? THREE.MathUtils.lerp(3.6, 1.05, offset / 0.5)
+      : THREE.MathUtils.lerp(1.05, -2.4, (offset - 0.5) / 0.5);
     const centered = stage === "trunk" && Math.abs(offset - 0.5) < 0.16;
     if (intro.instant && introZoomTimeline.current?.isActive()) {
       introZoomTimeline.current.progress(1);

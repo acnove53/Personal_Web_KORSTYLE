@@ -414,12 +414,13 @@ export function paintNeedleAtlas() {
     const baseX = originX + tile / 2;
     const baseY = originY + (variant.wheel ? tile / 2 : tile * 0.9);
     // Few, bold strokes: at screen size a fan is only ~50px across, so fine needles would vanish.
-    const count = variant.wheel ? 24 : 15 + Math.floor(random() * 5);
+    const count = variant.wheel ? 30 : 26 + Math.floor(random() * 7);
     for (let needle = 0; needle < count; needle++) {
       const along = count === 1 ? 0.5 : needle / (count - 1);
       const degrees = THREE.MathUtils.lerp(variant.from, variant.to, along) + (random() - 0.5) * 8;
       const angle = THREE.MathUtils.degToRad(degrees);
-      const sideFalloff = variant.wheel ? 1 : 0.72 + 0.28 * Math.cos(angle);
+      // Longer needles in the centre and shorter at the sides give each burst its half-dome.
+      const sideFalloff = variant.wheel ? 1 : 0.58 + 0.42 * Math.cos(angle);
       const length = tile * (variant.wheel ? 0.34 + random() * 0.08 : 0.32 + random() * 0.12) * sideFalloff;
       const directionX = Math.sin(angle);
       const directionY = -Math.cos(angle);
@@ -431,7 +432,7 @@ export function paintNeedleAtlas() {
       const bend = (random() - 0.5) * length * 0.12;
       const controlX = (startX + tipX) / 2 - directionY * bend;
       const controlY = (startY + tipY) / 2 + directionX * bend;
-      const halfWidth = tile * (0.013 + random() * 0.006);
+      const halfWidth = tile * (0.011 + random() * 0.005);
       context.fillStyle = ink(0.82 + random() * 0.18);
       context.beginPath();
       context.moveTo(startX - directionY * halfWidth, startY + directionX * halfWidth);
@@ -440,8 +441,8 @@ export function paintNeedleAtlas() {
       context.closePath();
       context.fill();
     }
-    context.fillStyle = ink(0.95);
-    dab(context, baseX, baseY, tile * 0.022, tile * 0.016, 0);
+    context.fillStyle = ink(1);
+    dab(context, baseX, baseY, tile * 0.04, tile * 0.028, 0);
   });
 
   return toCoverageTexture(canvas);

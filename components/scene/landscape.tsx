@@ -188,7 +188,8 @@ export function InkLandscape({ intro, reducedMotion }: { intro: IntroTimeline; r
         sunZ,
       );
       sun.scale.setScalar((radius * 2) / 0.86);
-      sunMaterial.uniforms.uOpacity.value = reveal * 0.94;
+      // The sun belongs to the sky above the crown; it fades out as the camera moves down to the roots.
+      sunMaterial.uniforms.uOpacity.value = reveal * 0.94 * smoothStep(-1.2, 0.2, camera.position.y);
     }
   });
 
