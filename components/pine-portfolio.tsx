@@ -1,32 +1,74 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { PineScene, type PortfolioNode, type StageName } from "@/components/pine-scene";
-
-const stageCopy: Record<StageName, { chapter: string; title: string; note: string }> = {
-  branches: {
-    chapter: "04 / CANOPY",
-    title: "Ideas take shape.",
-    note: "Selected work · five projects grown from the same root system.",
-  },
-  trunk: {
-    chapter: "03 / TRUNK",
-    title: "Jinyoung Daniel Jeon",
-    note: "Bridging the gap between hardware and intelligence.",
-  },
-  roots: {
-    chapter: "02 / ROOTS",
-    title: "Built on understanding.",
-    note: "Experience · the people, systems, and disciplines beneath the work.",
-  },
-};
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import { Component, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { PineScene, type PortfolioNode } from "@/components/pine-scene";
+import {
+  aboutSummary,
+  contact,
+  portfolioEntries,
+  stageCopy,
+  type PortfolioEntry,
+  type StageName,
+} from "@/content/portfolio";
 
 const stageOrder: { stage: StageName; number: string; label: string }[] = [
   { stage: "branches", number: "04", label: "Projects" },
   { stage: "trunk", number: "03", label: "About" },
   { stage: "roots", number: "02", label: "Experience" },
 ];
+
+const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+
+function subscribeReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(reducedMotionQuery);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia(reducedMotionQuery).matches,
+    () => false,
+  );
+}
+
+let webglSupport: boolean | undefined;
+
+function detectWebgl() {
+  if (webglSupport === undefined) {
+    try {
+      const canvas = document.createElement("canvas");
+      webglSupport = Boolean(canvas.getContext("webgl2") ?? canvas.getContext("webgl"));
+    } catch {
+      webglSupport = false;
+    }
+  }
+  return webglSupport;
+}
+
+const subscribeNever = () => () => {};
+
+function useWebglSupport() {
+  return useSyncExternalStore(subscribeNever, detectWebgl, () => true);
+}
+
+class SceneErrorBoundary extends Component<{ onError: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 export function PinePortfolio() {
   const introTitleRef = useRef<HTMLDivElement>(null);
@@ -36,6 +78,11 @@ export function PinePortfolio() {
   const [scrollToStage, setScrollToStage] = useState<((stage: StageName) => void) | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [aboutTextRevealed, setAboutTextRevealed] = useState(false);
+  const [introSkipped, setIntroSkipped] = useState(false);
+  const [sceneFailed, setSceneFailed] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
+  const webglSupported = useWebglSupport();
+  const showScene = webglSupported && !sceneFailed;
 
   const connectScroll = useCallback((scroll: (stage: StageName) => void) => {
     setScrollToStage(() => scroll);
@@ -57,113 +104,149 @@ export function PinePortfolio() {
     setAboutTextRevealed(true);
   }, []);
 
+  const handleIntroComplete = useCallback(() => {
+    setSceneReady(true);
+  }, []);
+
+  const shellState = showScene ? (sceneReady ? "scene-ready" : "") : "scene-ready scene-fallback";
+
   return (
-    <main id="top" className={`portfolio-shell ${sceneReady ? "scene-ready" : ""}`}>
-      <div className="scene-backdrop" aria-hidden="true" />
-      <div className="canvas-wrap" aria-label="Interactive ink-wash pine tree portfolio scene">
-        <PineScene
-          onStageChange={setStage}
-          onSelectNode={handleSelect}
-          selectedNode={selected}
-          onConnectScroll={connectScroll}
-          onIntroComplete={() => setSceneReady(true)}
-          onAboutTextReveal={handleAboutTextReveal}
-          introTitleRef={introTitleRef}
-          aboutTextRef={aboutTextRef}
-        />
-      </div>
+    <MotionConfig reducedMotion="user">
+      <main id="top" className={`portfolio-shell ${shellState}`}>
+        <div className="scene-backdrop" aria-hidden="true" />
+        {showScene ? (
+          <div className="canvas-wrap" aria-label="Interactive ink-wash pine tree portfolio scene">
+            <SceneErrorBoundary onError={() => setSceneFailed(true)}>
+              <PineScene
+                onStageChange={setStage}
+                onSelectNode={handleSelect}
+                selectedNode={selected}
+                onConnectScroll={connectScroll}
+                onIntroComplete={handleIntroComplete}
+                onAboutTextReveal={handleAboutTextReveal}
+                skipIntro={introSkipped || reducedMotion}
+                reducedMotion={reducedMotion}
+                introTitleRef={introTitleRef}
+                aboutTextRef={aboutTextRef}
+              />
+            </SceneErrorBoundary>
+          </div>
+        ) : (
+          <div className="canvas-fallback">
+            <p className="fallback-note">The interactive ink-wash scene needs WebGL, so here is the plain version.</p>
+            <PortfolioIndex includeAbout />
+          </div>
+        )}
 
-      <div className="paper-grain" aria-hidden="true" />
-      <div className="edge-vignette" aria-hidden="true" />
-
-      <header className="site-header">
-        <a className="wordmark" href="#top" aria-label="Jinyoung Jeon, home">
-          <span className="wordmark-mark">J<span>J</span></span>
-          <span className="wordmark-copy">
-            <strong>JINYOUNG JEON</strong>
-            <small>SOFTWARE · AI · SYSTEMS</small>
-          </span>
-        </a>
-        <div className="header-right">
-          <span className="availability"><i /> OPEN TO OPPORTUNITIES</span>
-          <a className="contact-link" href="mailto:hello@jinyoungjeon.dev">
-            GET IN TOUCH <span aria-hidden="true">↗</span>
-          </a>
-        </div>
-      </header>
-
-      <div className="stage-index" aria-label="Portfolio chapters">
-        <p className="index-caption">FIELD NOTES <span>2026</span></p>
-        <div className="index-rule" />
-        {stageOrder.map((item) => (
-          <button
-            key={item.stage}
-            className={`stage-link ${stage === item.stage ? "is-current" : ""}`}
-            onClick={() => scrollToStage?.(item.stage)}
-            aria-current={stage === item.stage ? "step" : undefined}
-          >
-            <span className="stage-link-number">{item.number}</span>
-            <span className="stage-link-name">{item.label}</span>
-            <span className="stage-link-dot" />
-          </button>
-        ))}
-        <div className="index-bottom">SCROLL TO<br />MOVE THROUGH THE TREE</div>
-      </div>
-
-      {!selected && stage === "trunk" && (
-        <div className="about-overlay" aria-hidden={!aboutTextRevealed}>
-          <section
-            ref={aboutTextRef}
-            className={`chapter-intro chapter-trunk ${aboutTextRevealed ? "" : "chapter-intro-pending"}`}
-          >
-            <ChapterContent stage="trunk" scrollToStage={scrollToStage} />
+        {showScene && (
+          <section className="sr-only" aria-label="Portfolio index">
+            <PortfolioIndex />
           </section>
+        )}
+
+        <div className="paper-grain" aria-hidden="true" />
+        <div className="edge-vignette" aria-hidden="true" />
+
+        <header className="site-header">
+          <a className="wordmark" href="#top" aria-label="Jinyoung Jeon, home">
+            <span className="wordmark-mark">J<span>J</span></span>
+            <span className="wordmark-copy">
+              <strong>JINYOUNG JEON</strong>
+              <small>SOFTWARE · AI · SYSTEMS</small>
+            </span>
+          </a>
+          <div className="header-right">
+            <span className="availability"><i /> OPEN TO OPPORTUNITIES</span>
+            <a className="contact-link" href={`mailto:${contact.email}`}>
+              GET IN TOUCH <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </header>
+
+        <div className="stage-index" aria-label="Portfolio chapters">
+          <p className="index-caption">FIELD NOTES <span>2026</span></p>
+          <div className="index-rule" />
+          {stageOrder.map((item) => (
+            <button
+              key={item.stage}
+              className={`stage-link ${stage === item.stage ? "is-current" : ""}`}
+              onClick={() => scrollToStage?.(item.stage)}
+              aria-current={stage === item.stage ? "step" : undefined}
+            >
+              <span className="stage-link-number">{item.number}</span>
+              <span className="stage-link-name">{item.label}</span>
+              <span className="stage-link-dot" />
+            </button>
+          ))}
+          <div className="index-bottom">SCROLL TO<br />MOVE THROUGH THE TREE</div>
         </div>
-      )}
 
-      <AnimatePresence mode="wait" initial={false}>
-        {sceneReady && !selected && stage !== "trunk" && (
-          <motion.section
-            key={stage}
-            className={`chapter-intro chapter-${stage}`}
-            initial={{ opacity: 0, y: 12, filter: "blur(8px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
-            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <ChapterContent stage={stage} scrollToStage={scrollToStage} />
-          </motion.section>
+        {showScene && !selected && stage === "trunk" && (
+          <div className="about-overlay" aria-hidden={!aboutTextRevealed}>
+            <section
+              ref={aboutTextRef}
+              className={`chapter-intro chapter-trunk ${aboutTextRevealed ? "" : "chapter-intro-pending"}`}
+            >
+              <ChapterContent stage="trunk" scrollToStage={scrollToStage} />
+            </section>
+          </div>
         )}
-      </AnimatePresence>
 
-      <div className="scene-caption" aria-live="polite">
-        <span className="caption-line" />
-        <span>{stage === "branches" ? "THE CANOPY" : stage === "roots" ? "THE ROOT SYSTEM" : "THE LIVING STRUCTURE"}</span>
-        <span className="caption-coordinates">37°33′ N&nbsp; 126°58′ E</span>
-      </div>
+        <AnimatePresence mode="wait" initial={false}>
+          {sceneReady && !selected && stage !== "trunk" && (
+            <motion.section
+              key={stage}
+              className={`chapter-intro chapter-${stage}`}
+              initial={{ opacity: 0, y: 12, filter: "blur(8px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <ChapterContent stage={stage} scrollToStage={scrollToStage} />
+            </motion.section>
+          )}
+        </AnimatePresence>
 
-      <div className="scroll-cue" aria-hidden="true">
-        <span className="scroll-cue-label">SCROLL</span>
-        <span className="scroll-cue-track"><i /></span>
-        <span className="scroll-cue-directions">↑ PROJECTS<br />↓ EXPERIENCE</span>
-      </div>
+        <div className="scene-caption" aria-live="polite">
+          <span className="caption-line" />
+          <span>{stage === "branches" ? "THE CANOPY" : stage === "roots" ? "THE ROOT SYSTEM" : "THE LIVING STRUCTURE"}</span>
+          <span className="caption-coordinates">37°33′ N&nbsp; 126°58′ E</span>
+        </div>
 
-      <AnimatePresence>
-        {selected && (
-          <DetailCard key={selected.id} node={selected} onClose={() => setSelected(null)} />
+        <div className="scroll-cue" aria-hidden="true">
+          <span className="scroll-cue-label">SCROLL</span>
+          <span className="scroll-cue-track"><i /></span>
+          <span className="scroll-cue-directions">↑ PROJECTS<br />↓ EXPERIENCE</span>
+        </div>
+
+        <AnimatePresence>
+          {selected && (
+            <DetailCard key={selected.id} node={selected} onClose={() => setSelected(null)} />
+          )}
+        </AnimatePresence>
+
+        <div ref={introTitleRef} className="intro-title" aria-hidden="true">
+          <span>A Study in Systems</span>
+        </div>
+
+        {showScene && !sceneReady && !introSkipped && !reducedMotion && (
+          <button className="skip-intro" type="button" onClick={() => setIntroSkipped(true)}>
+            SKIP INTRO <span aria-hidden="true">→</span>
+          </button>
         )}
-      </AnimatePresence>
 
-      <div ref={introTitleRef} className="intro-title" aria-hidden="true">
-        <span>A Study in Systems</span>
-      </div>
-
-      <footer className="site-footer">
-        <span>© 2026 JINYOUNG DANIEL JEON</span>
-        <span className="footer-center">FROM ROOTS TO REASONING</span>
-        <a href="mailto:hello@jinyoungjeon.dev">SAY HELLO ↗</a>
-      </footer>
-    </main>
+        <footer className="site-footer">
+          <span>© 2026 JINYOUNG DANIEL JEON</span>
+          <span className="footer-center">FROM ROOTS TO REASONING</span>
+          <span className="footer-links">
+            {contact.links.map((link) => (
+              <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label} ↗</a>
+            ))}
+            <a href={`mailto:${contact.email}`}>SAY HELLO ↗</a>
+          </span>
+        </footer>
+      </main>
+    </MotionConfig>
   );
 }
 
@@ -178,13 +261,7 @@ function ChapterContent({ stage, scrollToStage }: {
       <p className="chapter-tagline">{stageCopy[stage].note}</p>
       {stage === "trunk" ? (
         <>
-          <p className="hero-summary">
-            I am an engineer who seeks to understand low-level mechanisms before relying on
-            high-level applications. Just as I bridged languages and cultures as a KATUSA
-            interpreter, I now translate the strict rules of hardware into the flexible logic
-            of artificial intelligence. I build solid underlying structures and scalable
-            systems above them.
-          </p>
+          <p className="hero-summary">{aboutSummary}</p>
           <div className="hero-actions">
             <button className="text-action" onClick={() => scrollToStage?.("branches")}>
               EXPLORE SELECTED WORK <span aria-hidden="true">↗</span>
@@ -199,6 +276,42 @@ function ChapterContent({ stage, scrollToStage }: {
   );
 }
 
+function PortfolioIndex({ includeAbout = false }: { includeAbout?: boolean }) {
+  const groups: { stage: PortfolioEntry["stage"]; heading: string }[] = [
+    { stage: "branches", heading: "Selected projects" },
+    { stage: "roots", heading: "Experience" },
+  ];
+  return (
+    <div className="portfolio-index">
+      {includeAbout && (
+        <section>
+          <h1>Jinyoung Daniel Jeon</h1>
+          <p className="index-tagline">{stageCopy.trunk.note}</p>
+          <p>{aboutSummary}</p>
+        </section>
+      )}
+      {groups.map((group) => (
+        <section key={group.stage}>
+          <h2>{group.heading}</h2>
+          {portfolioEntries.filter((entry) => entry.stage === group.stage).map((entry) => (
+            <article key={entry.id}>
+              <p className="index-category">{entry.category}</p>
+              <h3>{entry.title}</h3>
+              <p>{entry.description}</p>
+              {entry.highlights && (
+                <ul>
+                  {entry.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}
+                </ul>
+              )}
+              <p className="index-stack">{entry.stack.join(" · ")}</p>
+            </article>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function DetailCard({ node, onClose }: { node: PortfolioNode; onClose: () => void }) {
   return (
     <motion.aside
@@ -208,7 +321,11 @@ function DetailCard({ node, onClose }: { node: PortfolioNode; onClose: () => voi
       exit={{ opacity: 0, x: 20, filter: "blur(10px)" }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
       aria-labelledby="detail-title"
-      onWheel={(event) => { if (Math.abs(event.deltaY) > 6) onClose(); }}
+      onWheel={(event) => {
+        const card = event.currentTarget;
+        const scrollable = card.scrollHeight > card.clientHeight + 1;
+        if (!scrollable && Math.abs(event.deltaY) > 6) onClose();
+      }}
     >
       <div className="detail-topline">
         <span className="detail-index">FIELD NOTE / {node.number}</span>
