@@ -56,10 +56,12 @@ export function CameraController({
   const framing = useMemo(() => new THREE.Vector3(), []);
   const textRects = useRef<Partial<Record<StageName, ScreenRect>>>({});
   const lastTextMeasure = useRef(-1);
-  const stagePoints = useMemo(() => ({
-    branches: nodes.filter((node) => node.stage === "branches").map((node) => new THREE.Vector3(...node.position).add(treeOrigin)),
-    roots: nodes.filter((node) => node.stage === "roots").map((node) => new THREE.Vector3(...node.position).add(treeOrigin)),
-  }), [nodes]);
+  const stagePoints = useMemo(() => {
+    const branches = nodes.filter((node) => node.stage === "branches").map((node) => new THREE.Vector3(...node.position).add(treeOrigin));
+    const roots = nodes.filter((node) => node.stage === "roots").map((node) => new THREE.Vector3(...node.position).add(treeOrigin));
+    // The About view frames the whole tree, crown to roots, beside the name.
+    return { branches, roots, trunk: [...branches, ...roots] };
+  }, [nodes]);
 
   useEffect(() => () => {
     introZoomTimeline.current?.kill();
@@ -78,6 +80,8 @@ export function CameraController({
       if (maxScroll > 0) element.scrollTop = maxScroll * 0.5;
       syncScrollInput();
     };
+    // The chapter links are the keyboard route; the scroll container itself shouldn't be an unnamed Tab stop.
+    element.tabIndex = -1;
     element.addEventListener("scroll", syncScrollInput, { passive: true });
     const frame = requestAnimationFrame(() => requestAnimationFrame(centerAtTrunk));
     onConnectScroll((stage) => {
@@ -92,6 +96,14 @@ export function CameraController({
   }, [onConnectScroll, reducedMotion, scroll.el]);
 
   useFrame(({ camera, gl, size, clock }, delta) => {
+    // Scrolling is held at the trunk until the intro has landed on About: scrolling away
+    // mid-intro would otherwise keep the About zoom (and with it the whole interface) from starting.
+    if (!introCompleteNotified.current) {
+      const element = scroll.el;
+      const maxScroll = element.scrollHeight - element.clientHeight;
+      if (maxScroll > 0 && Math.abs(element.scrollTop - maxScroll * 0.5) > 1) element.scrollTop = maxScroll * 0.5;
+      rawScrollOffset.current = 0.5;
+    }
     // Keep Drei's offset synchronized with its actual scroll element so both
     // wheel input and menu-driven scrollTo calls feed this camera controller.
     scroll.offset = rawScrollOffset.current;
@@ -154,16 +166,17 @@ export function CameraController({
     const trunkProximity = 1 - smoothStep(0.015, 0.18, Math.abs(offset - 0.5));
     const trunkZoom = intro.cameraZoom * trunkProximity;
     const cameraX = 1.48;
-    const cameraZ = THREE.MathUtils.lerp(14.2, 1.85, trunkZoom);
+    const cameraZ = 14.2;
 
-    // In the canopy and roots views, pan and pull back so no dot sits under the chapter text.
-    const textElement = chapterTextRef.current;
-    if (textElement && clock.elapsedTime - lastTextMeasure.current > 0.25) {
+    // Pan and pull back so the tree (and in the canopy and roots views, every dot) clears the chapter text.
+    if (clock.elapsedTime - lastTextMeasure.current > 0.25) {
       lastTextMeasure.current = clock.elapsedTime;
-      const measuredStage = (["branches", "roots"] as const).find((name) => textElement.classList.contains(`chapter-${name}`));
-      if (measuredStage) {
+      const canvasRect = gl.domElement.getBoundingClientRect();
+      for (const textElement of [chapterTextRef.current, aboutTextRef.current]) {
+        if (!textElement) continue;
+        const measuredStage = (["branches", "trunk", "roots"] as const).find((name) => textElement.classList.contains(`chapter-${name}`));
+        if (!measuredStage) continue;
         const rect = textElement.getBoundingClientRect();
-        const canvasRect = gl.domElement.getBoundingClientRect();
         textRects.current[measuredStage] = {
           left: rect.left - canvasRect.left,
           top: rect.top - canvasRect.top,
@@ -172,24 +185,26 @@ export function CameraController({
         };
       }
     }
-    const framingTarget = stage === "trunk" || !intro.complete
+    const fullFraming = !intro.complete
       ? { x: 0, y: 0, z: 0 }
       : computeFraming({
         points: stagePoints[stage],
         cameraX,
         cameraY,
-        cameraZ: 14.2,
+        cameraZ,
         fov: (camera as THREE.PerspectiveCamera).fov,
         width: size.width,
         height: size.height,
         textRect: textRects.current[stage] ?? null,
       });
-    framing.x = THREE.MathUtils.damp(framing.x, framingTarget.x, 3, delta);
-    framing.y = THREE.MathUtils.damp(framing.y, framingTarget.y, 3, delta);
-    framing.z = THREE.MathUtils.damp(framing.z, framingTarget.z, 3, delta);
+    // At About, the intro's closing move is this pan: the camera slides aside to make room for the name.
+    const framingWeight = stage === "trunk" ? intro.cameraZoom : 1;
+    framing.x = THREE.MathUtils.damp(framing.x, fullFraming.x * framingWeight, 3, delta);
+    framing.y = THREE.MathUtils.damp(framing.y, fullFraming.y * framingWeight, 3, delta);
+    framing.z = THREE.MathUtils.damp(framing.z, fullFraming.z * framingWeight, 3, delta);
 
     baseCamera.set(cameraX + framing.x, cameraY + framing.y, cameraZ + framing.z);
-    baseTarget.set(cameraX + framing.x, THREE.MathUtils.lerp(cameraY, 1.45, trunkZoom) + framing.y, 0);
+    baseTarget.set(cameraX + framing.x, cameraY + framing.y, 0);
     cameraPosition.copy(baseCamera);
     lookTarget.copy(baseTarget);
 
@@ -217,7 +232,10 @@ export function CameraController({
 
     // Keep every node hidden until the trunk zoom has reached its target and
     // the camera itself has settled. Nodes become available on later scrolls.
-    const cameraSettled = camera.position.distanceTo(cameraPosition) < 0.02;
+    const framingSettled = Math.abs(framing.x - fullFraming.x * framingWeight)
+      + Math.abs(framing.y - fullFraming.y * framingWeight)
+      + Math.abs(framing.z - fullFraming.z * framingWeight) < 0.03;
+    const cameraSettled = framingSettled && camera.position.distanceTo(cameraPosition) < 0.02;
     if (!introCompleteNotified.current && intro.complete && centered && trunkZoom > 0.999 && cameraSettled) {
       introCompleteNotified.current = true;
       onIntroComplete();

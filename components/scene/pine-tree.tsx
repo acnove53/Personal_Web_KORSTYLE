@@ -50,6 +50,8 @@ export function PineTree({
   nodes,
   nodesReady,
   selectedNode,
+  highlightedId,
+  onHighlightId,
   onSelectNode,
 }: {
   intro: IntroTimeline;
@@ -57,6 +59,8 @@ export function PineTree({
   nodes: PortfolioNode[];
   nodesReady: boolean;
   selectedNode: PortfolioNode | null;
+  highlightedId: string | null;
+  onHighlightId: (id: string | null) => void;
   onSelectNode: (node: PortfolioNode | null) => void;
 }) {
   const [visibleNodeStage, setVisibleNodeStage] = useState<"branches" | "roots" | null>(null);
@@ -123,6 +127,8 @@ export function PineTree({
           key={node.id}
           node={node}
           active={selectedNode?.id === node.id}
+          highlighted={highlightedId === node.id}
+          onHighlight={(on) => onHighlightId(on ? node.id : null)}
           onClick={() => onSelectNode(node)}
         />
       ))}
@@ -130,16 +136,25 @@ export function PineTree({
   );
 }
 
-function GlowNode({ node, active, onClick }: { node: PortfolioNode; active: boolean; onClick: () => void }) {
+function GlowNode({ node, active, highlighted, onHighlight, onClick }: {
+  node: PortfolioNode;
+  active: boolean;
+  highlighted: boolean;
+  onHighlight: (on: boolean) => void;
+  onClick: () => void;
+}) {
   const mesh = useRef<THREE.Mesh>(null);
   const ring = useRef<THREE.Mesh>(null);
+  const emphasis = useRef(0);
 
   useEffect(() => () => { document.body.style.cursor = ""; }, []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
+    // Pointing at the entry in the chapter list swells its dot and widens the ring.
+    emphasis.current = THREE.MathUtils.damp(emphasis.current, highlighted || active ? 1 : 0, 10, delta);
     const pulse = 1 + Math.sin(clock.elapsedTime * 1.8 + Number(node.number)) * 0.08;
-    if (mesh.current) mesh.current.scale.setScalar(pulse * (active ? 1.22 : 1));
-    if (ring.current) ring.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 1.45 + Number(node.number)) * 0.12);
+    if (mesh.current) mesh.current.scale.setScalar(pulse * (1 + emphasis.current * 0.3));
+    if (ring.current) ring.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 1.45 + Number(node.number)) * 0.12 + emphasis.current * 0.6);
   });
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
@@ -149,7 +164,12 @@ function GlowNode({ node, active, onClick }: { node: PortfolioNode; active: bool
 
   return (
     <group position={node.position}>
-      <mesh ref={mesh} onClick={handleClick} onPointerOver={() => { document.body.style.cursor = "pointer"; }} onPointerOut={() => { document.body.style.cursor = ""; }}>
+      <mesh
+        ref={mesh}
+        onClick={handleClick}
+        onPointerOver={() => { document.body.style.cursor = "pointer"; onHighlight(true); }}
+        onPointerOut={() => { document.body.style.cursor = ""; onHighlight(false); }}
+      >
         <sphereGeometry args={[0.105, 12, 10]} />
         <meshStandardMaterial color="#f4c79d" emissive="#d9381e" emissiveIntensity={2.2} roughness={0.3} toneMapped={false} />
       </mesh>
@@ -163,13 +183,15 @@ function GlowNode({ node, active, onClick }: { node: PortfolioNode; active: bool
       </mesh>
       <Html center position={[0.24, 0.23, 0.08]} distanceFactor={9} zIndexRange={[10, 0]}>
         <button
-          className="node-action"
+          className={`node-action ${highlighted ? "is-highlighted" : ""}`}
           type="button"
-          aria-label={`Open ${node.title} field note`}
-          aria-pressed={active}
+          tabIndex={-1}
+          aria-hidden="true"
+          onPointerEnter={() => onHighlight(true)}
+          onPointerLeave={() => onHighlight(false)}
           onClick={(event) => { event.stopPropagation(); onClick(); }}
         >
-          <span className="node-label"><span>{node.number}</span><i /></span>
+          <span className="node-label"><span>{node.number}</span><i /><em>{node.short}</em></span>
         </button>
       </Html>
     </group>

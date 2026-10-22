@@ -16,8 +16,10 @@ export type { PortfolioNode } from "@/components/scene/types";
 
 type PineSceneProps = {
   onStageChange: (stage: StageName) => void;
-  onSelectNode: (node: PortfolioNode | null) => void;
-  selectedNode: PortfolioNode | null;
+  onSelectId: (id: string | null) => void;
+  selectedId: string | null;
+  highlightedId: string | null;
+  onHighlightId: (id: string | null) => void;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   onIntroComplete: () => void;
   onAboutTextReveal: () => void;
@@ -30,8 +32,10 @@ type PineSceneProps = {
 
 export function PineScene({
   onStageChange,
-  onSelectNode,
-  selectedNode,
+  onSelectId,
+  selectedId,
+  highlightedId,
+  onHighlightId,
   onConnectScroll,
   onIntroComplete,
   onAboutTextReveal,
@@ -81,8 +85,10 @@ export function PineScene({
           aboutTextRef={aboutTextRef}
           chapterTextRef={chapterTextRef}
           onStageChange={onStageChange}
-          selectedNode={selectedNode}
-          onSelectNode={onSelectNode}
+          selectedId={selectedId}
+          highlightedId={highlightedId}
+          onHighlightId={onHighlightId}
+          onSelectId={onSelectId}
           onConnectScroll={onConnectScroll}
           reducedMotion={reducedMotion}
         />
@@ -100,8 +106,10 @@ function TreeWithCamera({
   aboutTextRef,
   chapterTextRef,
   onStageChange,
-  selectedNode,
-  onSelectNode,
+  selectedId,
+  highlightedId,
+  onHighlightId,
+  onSelectId,
   onConnectScroll,
   reducedMotion,
 }: {
@@ -112,13 +120,17 @@ function TreeWithCamera({
   aboutTextRef: { current: HTMLElement | null };
   chapterTextRef: { current: HTMLElement | null };
   onStageChange: (stage: StageName) => void;
-  selectedNode: PortfolioNode | null;
-  onSelectNode: (node: PortfolioNode | null) => void;
+  selectedId: string | null;
+  highlightedId: string | null;
+  onHighlightId: (id: string | null) => void;
+  onSelectId: (id: string | null) => void;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   reducedMotion: boolean;
 }) {
   const geometry = useMemo(() => buildPineGeometry(), []);
   const nodes = useMemo(() => createPortfolioNodes(geometry), [geometry]);
+  const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
+  const onSelectNode = useCallback((node: PortfolioNode | null) => onSelectId(node?.id ?? null), [onSelectId]);
 
   return (
     <>
@@ -142,6 +154,8 @@ function TreeWithCamera({
         nodes={nodes}
         nodesReady={nodesReady}
         selectedNode={selectedNode}
+        highlightedId={highlightedId}
+        onHighlightId={onHighlightId}
         onSelectNode={onSelectNode}
       />
     </>

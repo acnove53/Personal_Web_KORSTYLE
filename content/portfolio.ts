@@ -4,55 +4,64 @@ export type PortfolioEntry = {
   id: string;
   number: string;
   title: string;
+  /** A few words: the dot's label in the scene and the chapter list's lead. */
+  short: string;
   category: string;
   description: string;
   stack: string[];
   highlights?: string[];
+  /** Optional outbound link (repo, demo, write-up) shown at the foot of the field note. */
+  link?: { label: string; href: string };
   stage: "branches" | "roots";
 };
 
-// TODO: replace the placeholder email and fill in any profile links before publishing.
+// TODO: replace the placeholder email and fill in the profile and résumé links before publishing.
+// Links appear in the About text and the footer as soon as they are filled in.
 export const contact: {
   email: string;
   links: { label: string; href: string }[];
 } = {
   email: "hello@jinyoungjeon.dev",
   links: [
-    // { label: "GITHUB", href: "https://github.com/..." },
-    // { label: "LINKEDIN", href: "https://www.linkedin.com/in/..." },
+    // { label: "GitHub", href: "https://github.com/..." },
+    // { label: "LinkedIn", href: "https://www.linkedin.com/in/..." },
+    // { label: "Résumé", href: "/resume.pdf" },
   ],
 };
+
+export const role = "Full-stack & AI engineer at NorthBound College";
 
 // mark: 上 (top), 中 (middle), 下 (bottom) — where each chapter sits on the tree.
 export const stageCopy: Record<StageName, { mark: string; chapter: string; title: string; note: string }> = {
   branches: {
     mark: "上",
-    chapter: "CANOPY",
+    chapter: "PROJECTS",
     title: "Ideas take shape.",
-    note: "Selected work · five projects grown from the same root system.",
+    note: "Five projects grown from the same root system.",
   },
   trunk: {
     mark: "中",
-    chapter: "TRUNK",
+    chapter: "ABOUT",
     title: "Jinyoung Daniel Jeon",
     note: "Bridging the gap between hardware and intelligence.",
   },
   roots: {
     mark: "下",
-    chapter: "ROOTS",
+    chapter: "EXPERIENCE",
     title: "Built on understanding.",
-    note: "Experience · the people, systems, and disciplines beneath the work.",
+    note: "The people, systems, and disciplines beneath the work.",
   },
 };
 
 export const aboutSummary =
-  "I am an engineer who seeks to understand low-level mechanisms before relying on high-level applications. Just as I bridged languages and cultures as a KATUSA interpreter, I now translate the strict rules of hardware into the flexible logic of artificial intelligence. I build solid underlying structures and scalable systems above them.";
+  "I build full-stack and AI systems, and I like to understand the layer underneath before I build on top of it. As a KATUSA sergeant I interpreted between Korean and U.S. forces; now I translate the strict rules of hardware into the flexible logic of artificial intelligence.";
 
 export const portfolioEntries: PortfolioEntry[] = [
   {
     id: "timeslips",
     number: "01",
     title: "TimeSlips AI-Integrated Mobile App",
+    short: "TimeSlips",
     category: "CURRENT PROJECT · AI / CARE",
     description: "An AI coaching platform that helps care facilitators build more meaningful moments with people living with dementia. Designed around a calm mobile workflow, with serverless services supporting timely, context-aware guidance.",
     stack: ["React Native", "AWS Serverless", "AWS Bedrock"],
@@ -63,6 +72,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     id: "travel-health",
     number: "02",
     title: "AI-Powered Travel Health Coach",
+    short: "Travel Health Coach",
     category: "PERSONAL PROJECT · AI / HEALTH",
     description: "A context-aware recommendation agent that helps travelers make dietary and health choices with local context in mind. Prompt design connects itinerary, food, and personal needs into a practical coaching experience.",
     stack: ["Python", "LLMs", "Prompt Design"],
@@ -72,6 +82,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     id: "neural-vision",
     number: "03",
     title: "Neural Networks & Vision Pipelines",
+    short: "Vision Pipelines",
     category: "RESEARCH · MACHINE LEARNING",
     description: "From manually implementing backpropagation for a three-layer neural network in JAX to fine-tuning VGG19 on the PACE H100 cluster, these experiments explore how learning systems behave from the inside out.",
     stack: ["JAX", "VGG19", "PACE H100"],
@@ -82,6 +93,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     id: "bytefight",
     number: "04",
     title: "ByteFight 2026 Autonomous Agent",
+    short: "ByteFight Agent",
     category: "COMPETITION · AUTONOMOUS SYSTEMS",
     description: "A Python strategy agent that reasons about a changing game state and makes decisions under strict compute-time limits. Custom pathfinding heuristics help balance search depth with fast, reliable moves.",
     stack: ["Python", "Pathfinding", "Heuristics"],
@@ -91,6 +103,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     id: "jobjoe",
     number: "05",
     title: "JobJoe",
+    short: "JobJoe",
     category: "TEAM PROJECT · WEB PLATFORM",
     description: "A Django platform for organizing the job search, backed by a carefully structured SQLite database. As Scrum Master, I coordinated the team through two-week sprints and kept delivery focused.",
     stack: ["Django", "SQLite", "Scrum"],
@@ -99,8 +112,9 @@ export const portfolioEntries: PortfolioEntry[] = [
   },
   {
     id: "northbound",
-    number: "01",
+    number: "06",
     title: "NorthBound College",
+    short: "NorthBound",
     category: "FULL-STACK ENGINEER · CURRENT",
     description: "Engineered an AI-powered college admissions platform. I built typed data boundaries around model and API interactions so fast-moving product work could stay predictable and maintainable.",
     stack: ["Express", "PostgreSQL", "Gemini API", "Zod"],
@@ -109,8 +123,9 @@ export const portfolioEntries: PortfolioEntry[] = [
   },
   {
     id: "katusa",
-    number: "02",
+    number: "07",
     title: "19th ESC · U.S. Forces Korea",
+    short: "KATUSA · USFK",
     category: "KATUSA · SERGEANT",
     description: "Served as consecutive and simultaneous interpreter for the Command Sergeant Major. I bridged cultural gaps, supported leadership communications, and helped keep information moving across a force of more than 500 personnel.",
     stack: ["Interpretation", "Leadership", "Communication"],
@@ -119,8 +134,9 @@ export const portfolioEntries: PortfolioEntry[] = [
   },
   {
     id: "georgia-tech",
-    number: "03",
+    number: "08",
     title: "Georgia Institute of Technology",
+    short: "Georgia Tech",
     category: "B.S. COMPUTER SCIENCE · 2025",
     description: "Studied Computer Science with concentrations in Intelligence and Devices. Faculty Honors and a 3.92 GPA reflect a sustained interest in the boundary where software meets physical systems.",
     stack: ["Intelligence", "Devices", "Hardware / Software"],
