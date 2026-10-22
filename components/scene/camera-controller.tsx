@@ -139,6 +139,9 @@ export function CameraController({
   }, [onConnectScroll, reducedMotion, scroll.el]);
 
   useFrame(({ camera, gl, size, clock }, delta) => {
+    // With reduced motion the camera cuts to each new view instead of gliding there.
+    const follow = (current: number, target: number, lambda: number, dt: number) =>
+      reducedMotion ? target : THREE.MathUtils.damp(current, target, lambda, dt);
     // Scrolling is held at the trunk until the intro has landed on About: scrolling away
     // mid-intro would otherwise keep the About zoom (and with it the whole interface) from starting.
     if (!introCompleteNotified.current) {
@@ -164,7 +167,7 @@ export function CameraController({
     }
 
     const targetZoom = selectedNode ? 1 : 0;
-    zoom.current = THREE.MathUtils.damp(zoom.current, targetZoom, selectedNode ? 2.5 : 3.4, delta);
+    zoom.current = follow(zoom.current, targetZoom, selectedNode ? 2.5 : 3.4, delta);
 
     // The center page is the trunk; offset 0 is the canopy and 1 is the roots.
     // Camera Y is assigned directly from ScrollControls every frame.
@@ -245,9 +248,9 @@ export function CameraController({
       });
     // At About, the intro's closing move is this pan: the camera slides aside to make room for the name.
     const framingWeight = stage === "trunk" ? intro.cameraZoom : 1;
-    framing.x = THREE.MathUtils.damp(framing.x, fullFraming.x * framingWeight, 3, delta);
-    framing.y = THREE.MathUtils.damp(framing.y, fullFraming.y * framingWeight, 3, delta);
-    framing.z = THREE.MathUtils.damp(framing.z, fullFraming.z * framingWeight, 3, delta);
+    framing.x = follow(framing.x, fullFraming.x * framingWeight, 3, delta);
+    framing.y = follow(framing.y, fullFraming.y * framingWeight, 3, delta);
+    framing.z = follow(framing.z, fullFraming.z * framingWeight, 3, delta);
 
     baseCamera.set(cameraX + framing.x, cameraY + framing.y, cameraZ + framing.z);
     baseTarget.set(cameraX + framing.x, cameraY + framing.y, 0);
@@ -281,9 +284,9 @@ export function CameraController({
       camera.position.copy(cameraPosition);
     } else {
       const cameraDamping = introZoomStarted.current && !introCompleteNotified.current ? 16 : 5;
-      camera.position.x = THREE.MathUtils.damp(camera.position.x, cameraPosition.x, cameraDamping, delta);
-      camera.position.y = THREE.MathUtils.damp(camera.position.y, cameraPosition.y, cameraDamping, delta);
-      camera.position.z = THREE.MathUtils.damp(camera.position.z, cameraPosition.z, cameraDamping, delta);
+      camera.position.x = follow(camera.position.x, cameraPosition.x, cameraDamping, delta);
+      camera.position.y = follow(camera.position.y, cameraPosition.y, cameraDamping, delta);
+      camera.position.z = follow(camera.position.z, cameraPosition.z, cameraDamping, delta);
     }
     camera.lookAt(lookTarget);
 

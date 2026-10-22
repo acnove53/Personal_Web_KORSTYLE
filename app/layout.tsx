@@ -21,10 +21,31 @@ const mono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+const title = "Jinyoung Daniel Jeon — Software & AI Engineer";
+const description =
+  "Full-stack & AI engineer at NorthBound College. A portfolio drawn as an ink-wash pine: projects in the canopy, experience in the roots.";
+
+// The public address, for absolute link-preview URLs: set SITE_URL (e.g. https://example.com) where the site
+// is deployed. On Vercel the production domain is picked up automatically.
+const siteUrl = process.env.SITE_URL
+  ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  title: "Jinyoung Daniel Jeon — Software & AI Engineer",
-  description:
-    "A software and AI engineer bridging low-level systems and intelligent applications.",
+  metadataBase: new URL(siteUrl),
+  title,
+  description,
+  openGraph: {
+    type: "website",
+    title,
+    description,
+    siteName: "Jinyoung Daniel Jeon",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export const viewport: Viewport = {
