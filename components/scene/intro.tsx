@@ -51,7 +51,7 @@ export type IntroTimeline = {
 const introSproutDuration = 3;
 const dropFallDuration = 1.08;
 const splashDuration = 2.4;
-const backgroundRevealDuration = 1.6;
+const backgroundRevealDuration = 1.3;
 const seedStart = { x: 0.06, y: 3.85, z: 0, scaleX: 0, scaleY: 0, scaleZ: 0, opacity: 0, visible: false, pinch: 0.8, sag: 1, fall: 0 };
 const satelliteStart = { y: 3.85, scale: 0, visible: false };
 const splashStart = { active: false, time: 0, lake: 0, fade: 0 };
@@ -193,7 +193,7 @@ export function IntroSequence({ intro, titleRef, skip }: {
     timeline.call(() => {
       intro.phase = "sprout";
       intro.elapsed = 0;
-    }, undefined, "impact+=1.6");
+    }, undefined, "impact+=1.2");
     timeline.to(intro.splash, {
       fade: 1,
       duration: 0.8,

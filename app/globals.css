@@ -51,6 +51,8 @@ h2[tabindex="-1"]:focus { outline: none; }
 .portfolio-shell:not(.scene-ready) .site-header, .portfolio-shell:not(.scene-ready) .site-footer, .portfolio-shell:not(.scene-ready) .stage-index, .portfolio-shell:not(.scene-ready) .scene-caption, .portfolio-shell:not(.scene-ready) .scroll-cue { opacity: 0; visibility: hidden; }
 .portfolio-shell.scene-ready .site-header, .portfolio-shell.scene-ready .site-footer, .portfolio-shell.scene-ready .stage-index, .portfolio-shell.scene-ready .scene-caption, .portfolio-shell.scene-ready .scroll-cue { opacity: 1; visibility: visible; transition: opacity .8s ease; }
 .portfolio-shell:not(.scene-ready) .edge-vignette { opacity: 0; }
+/* The header, and with it the name, arrives as the tree starts drawing rather than after the whole intro. */
+.portfolio-shell.intro-sprouted .site-header { opacity: 1; visibility: visible; transition: opacity 1.2s ease; }
 
 .site-header { inset: 0 0 auto; height: 93px; padding: 0 5.2vw; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(45,45,45,.13); }
 .wordmark { display: inline-flex; gap: 13px; align-items: center; text-decoration: none; }
@@ -116,7 +118,8 @@ h2[tabindex="-1"]:focus { outline: none; }
 .chapter-list button { width: 100%; min-height: 44px; display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; padding: 0 2px; border: 0; background: transparent; text-align: left; transition: color .2s; }
 .chapter-list-number { color: var(--stamp-text); font: 11px var(--mono); letter-spacing: .06em; }
 .chapter-list-title { font: 17px/1.2 var(--serif); transition: transform .25s cubic-bezier(.22,1,.36,1); }
-.chapter-list-kind { max-width: 16ch; overflow: hidden; color: var(--muted); font: 11px var(--mono); letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-list-kind { max-width: 22ch; overflow: hidden; color: var(--muted); font: 11px var(--mono); letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-next { margin-top: 18px; }
 .chapter-list button:hover .chapter-list-title, .chapter-list button:focus-visible .chapter-list-title, .chapter-list button.is-highlighted .chapter-list-title { transform: translateX(4px); color: var(--stamp-text); }
 
 .scene-caption { left: max(17.3vw, calc(5.2vw + 160px)); bottom: 91px; display: flex; align-items: center; gap: 10px; color: var(--muted); font: 11px var(--mono); letter-spacing: .13em; }
@@ -228,9 +231,12 @@ h2[tabindex="-1"]:focus { outline: none; }
   .stage-link { display: inline-flex; height: 44px; margin-right: 22px; border: 0; gap: 6px; text-shadow: 0 0 6px var(--paper), 0 0 14px var(--paper); }
   .stage-link-dot { display: none; }
   .chapter-intro { left: 28px; top: 100px; width: min(560px, calc(100% - 56px)); translate: none; }
+  /* Upright screens: the tree stands above its roots, so the roots chapter reads beneath them, on the rock. */
+  .chapter-roots { top: auto; bottom: 140px; }
+  .scroll-cue-directions, .scroll-cue-label { display: none; }
   .about-layer { left: 28px; right: 28px; top: 100px; bottom: auto; display: block; }
   .chapter-trunk { width: min(560px, 100%); }
-  .scene-caption { left: 28px; bottom: 133px; }
+  .scene-caption { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -251,6 +257,8 @@ h2[tabindex="-1"]:focus { outline: none; }
   .stage-link-dot { display: none; }
   /* Text sits at the top on phones; the camera framing moves the tree below it. */
   .chapter-intro { left: 20px; top: 82px; width: calc(100% - 40px); translate: none; }
+  .chapter-roots { top: auto; bottom: 104px; }
+  .chapter-list-kind { max-width: 16ch; }
   .about-layer { left: 20px; right: 20px; top: 82px; bottom: auto; display: block; }
   .chapter-trunk { width: 100%; }
   .chapter-intro::before, .chapter-trunk::before { inset: -16px -20px; background: radial-gradient(closest-side, rgba(249,248,246,.95), rgba(249,248,246,.88) 60%, rgba(249,248,246,0)); }
@@ -263,6 +271,8 @@ h2[tabindex="-1"]:focus { outline: none; }
   .hero-actions { gap: 22px; margin-top: 12px; }
   .hero-meta { margin-top: 10px; }
   .chapter-list { margin-top: 14px; }
+  /* Phones already have the chapter links along the bottom. */
+  .chapter-next { display: none; }
   .chapter-list button { min-height: 42px; }
   .chapter-list-title { font-size: 16px; }
   .scene-caption { display: none; }

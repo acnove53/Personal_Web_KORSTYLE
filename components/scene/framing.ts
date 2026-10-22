@@ -33,9 +33,13 @@ export function computeFraming({ points, cameraX, cameraY, cameraZ, fov, width, 
     };
   });
 
+  // Portrait text sits either across the top (the tree goes below it) or across the bottom (the tree goes above).
+  const textBelow = (textRect.top + textRect.bottom) / 2 > height / 2;
   const box = landscape
     ? { x0: textRect.right + textMargin, x1: width - (width * 0.052 + 170), y0: 110, y1: height - 110 }
-    : { x0: 32, x1: width - 64, y0: textRect.bottom + textMargin, y1: height - 170 };
+    : textBelow
+      ? { x0: 32, x1: width - 64, y0: 110, y1: textRect.top - textMargin }
+      : { x0: 32, x1: width - 64, y0: textRect.bottom + textMargin, y1: height - 170 };
   const main = landscape ? "x" : "y";
   const cross = landscape ? "y" : "x";
   const mainStart = landscape ? box.x0 : box.y0;

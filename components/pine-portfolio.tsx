@@ -1,8 +1,8 @@
 "use client";
 
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { Component, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { PineScene } from "@/components/pine-scene";
 import {
   aboutSummary,
   contact,
@@ -18,6 +18,9 @@ const stageOrder: { stage: StageName; label: string }[] = [
   { stage: "trunk", label: "About" },
   { stage: "roots", label: "Experience" },
 ];
+
+// three.js, R3F and the scene load as their own chunk, so the page shell and its text don't wait on them.
+const PineScene = dynamic(() => import("@/components/pine-scene").then((mod) => mod.PineScene), { ssr: false });
 
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 const introTitle = "A Study in Systems";
@@ -57,6 +60,33 @@ function useWebglSupport() {
   return useSyncExternalStore(subscribeNever, detectWebgl, () => true);
 }
 
+// A reload or return within the same browser session goes straight to the finished painting.
+const introSeenKey = "pine-intro-seen";
+let introSeenAtLoad: boolean | undefined;
+
+function readIntroSeen() {
+  if (introSeenAtLoad === undefined) {
+    try {
+      introSeenAtLoad = window.sessionStorage.getItem(introSeenKey) === "1";
+    } catch {
+      introSeenAtLoad = false;
+    }
+  }
+  return introSeenAtLoad;
+}
+
+function useIntroSeen() {
+  return useSyncExternalStore(subscribeNever, readIntroSeen, () => false);
+}
+
+function rememberIntroSeen() {
+  try {
+    window.sessionStorage.setItem(introSeenKey, "1");
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data); the intro simply plays again.
+  }
+}
+
 class SceneErrorBoundary extends Component<{ onError: () => void; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
 
@@ -85,9 +115,12 @@ export function PinePortfolio() {
   const [sceneReady, setSceneReady] = useState(false);
   const [aboutTextRevealed, setAboutTextRevealed] = useState(false);
   const [introSkipped, setIntroSkipped] = useState(false);
+  const [introSprouted, setIntroSprouted] = useState(false);
   const [sceneFailed, setSceneFailed] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
+  const introSeen = useIntroSeen();
   const webglSupported = useWebglSupport();
+  const skipIntro = introSkipped || reducedMotion || introSeen;
   const showScene = webglSupported && !sceneFailed;
   const selected = portfolioEntries.find((entry) => entry.id === selectedId) ?? null;
 
@@ -131,9 +164,16 @@ export function PinePortfolio() {
 
   const handleIntroComplete = useCallback(() => {
     setSceneReady(true);
+    rememberIntroSeen();
   }, []);
 
-  const shellState = showScene ? (sceneReady ? "scene-ready" : "") : "scene-ready scene-fallback";
+  const handleIntroSprout = useCallback(() => {
+    setIntroSprouted(true);
+  }, []);
+
+  const shellState = showScene
+    ? `${sceneReady ? "scene-ready" : ""} ${introSprouted ? "intro-sprouted" : ""}`
+    : "scene-ready scene-fallback";
   const nameHeadingShown = showScene && !selected && stage === "trunk";
 
   return (
@@ -187,8 +227,9 @@ export function PinePortfolio() {
                   onHighlightId={setHighlightedId}
                   onConnectScroll={connectScroll}
                   onIntroComplete={handleIntroComplete}
+                  onIntroSprout={handleIntroSprout}
                   onAboutTextReveal={handleAboutTextReveal}
-                  skipIntro={introSkipped || reducedMotion}
+                  skipIntro={skipIntro}
                   reducedMotion={reducedMotion}
                   introTitleRef={introTitleRef}
                   aboutTextRef={aboutTextRef}
@@ -278,7 +319,7 @@ export function PinePortfolio() {
           </span>
         </div>
 
-        {showScene && !sceneReady && !introSkipped && !reducedMotion && (
+        {showScene && !sceneReady && !skipIntro && (
           <button className="skip-intro" type="button" onClick={() => setIntroSkipped(true)}>
             SKIP INTRO <span aria-hidden="true">→</span>
           </button>
@@ -342,6 +383,10 @@ function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlig
   }
 
   const entries = portfolioEntries.filter((entry) => entry.stage === stage);
+  // Projects sit above About and Experience below it, so each chapter points to the other.
+  const other = stage === "branches"
+    ? { stage: "roots" as const, arrow: "↓", label: "EXPERIENCE" }
+    : { stage: "branches" as const, arrow: "↑", label: "PROJECTS" };
   return (
     <>
       {eyebrow}
@@ -366,6 +411,11 @@ function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlig
           </li>
         ))}
       </ol>
+      <div className="hero-actions chapter-next">
+        <button className="text-action" type="button" onClick={() => scrollToStage?.(other.stage)}>
+          <span aria-hidden="true">{other.arrow}</span> {other.label}
+        </button>
+      </div>
     </>
   );
 }

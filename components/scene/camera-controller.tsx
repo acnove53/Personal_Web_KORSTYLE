@@ -12,6 +12,9 @@ import { smoothStep } from "./math";
 import type { PortfolioNode } from "./types";
 
 const treeOrigin = new THREE.Vector3(1.45, -2.8, 0);
+// Scroll offsets each chapter settles on: the canopy at the top, the trunk (About) in the middle, the roots below.
+const chapterOffset: Record<StageName, number> = { branches: 0.04, trunk: 0.5, roots: 0.96 };
+const chapterOffsets = [chapterOffset.branches, chapterOffset.trunk, chapterOffset.roots];
 
 export function CameraController({
   intro,
@@ -62,6 +65,8 @@ export function CameraController({
     // The About view frames the whole tree, crown to roots, beside the name.
     return { branches, roots, trunk: [...branches, ...roots] };
   }, [nodes]);
+  const cardTop = useRef<number | null>(null);
+  const focusLift = useRef(0);
 
   useEffect(() => () => {
     introZoomTimeline.current?.kill();
@@ -69,28 +74,66 @@ export function CameraController({
 
   useEffect(() => {
     const element = scroll.el;
-    const syncScrollInput = () => {
-      const maxScroll = element.scrollHeight - element.clientHeight;
-      if (maxScroll > 0) {
-        rawScrollOffset.current = THREE.MathUtils.clamp(element.scrollTop / maxScroll, 0, 1);
+    const maxScroll = () => element.scrollHeight - element.clientHeight;
+    // Where the page last came to rest on a chapter; each gesture is measured from here.
+    let restingOffset = chapterOffset.trunk;
+    // A smooth scroll we started is left to finish (up to 1.5 s) before snapping looks at it again;
+    // if something cuts it short (a wheel tick mid-glide cancels it), it resumes toward its chapter.
+    let travellingUntil = 0;
+    let travelTarget: number | null = null;
+    let resumes = 0;
+    const scrollToOffset = (target: number) => {
+      restingOffset = target;
+      travelTarget = target;
+      travellingUntil = performance.now() + 1500;
+      if (maxScroll() > 0) element.scrollTo({ top: maxScroll() * target, behavior: reducedMotion ? "auto" : "smooth" });
+    };
+    // Each scroll gesture settles on a chapter: on the nearest one, or, if the gesture moved
+    // away from its chapter but not far enough to reach the next, on that next one.
+    let settleTimer = 0;
+    const settle = () => {
+      if (!introCompleteNotified.current) return;
+      const offset = rawScrollOffset.current;
+      const start = restingOffset;
+      const nearest = chapterOffsets.reduce((best, target) => Math.abs(offset - target) < Math.abs(offset - best) ? target : best);
+      if (Math.abs(offset - nearest) < 0.005) {
+        restingOffset = nearest;
+        travelTarget = null;
+        resumes = 0;
+        return;
       }
+      if (performance.now() < travellingUntil) {
+        settleTimer = window.setTimeout(settle, travellingUntil - performance.now() + 20);
+        return;
+      }
+      if (travelTarget !== null && resumes < 2) {
+        resumes += 1;
+        scrollToOffset(travelTarget);
+        return;
+      }
+      resumes = 0;
+      const neighbour = chapterOffsets[chapterOffsets.indexOf(start) + Math.sign(offset - start)];
+      scrollToOffset(nearest === start && Math.abs(offset - start) > 0.02 && neighbour !== undefined ? neighbour : nearest);
+    };
+    const syncScrollInput = () => {
+      if (maxScroll() > 0) {
+        rawScrollOffset.current = THREE.MathUtils.clamp(element.scrollTop / maxScroll(), 0, 1);
+      }
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settle, 160);
     };
     const centerAtTrunk = () => {
-      const maxScroll = element.scrollHeight - element.clientHeight;
-      if (maxScroll > 0) element.scrollTop = maxScroll * 0.5;
-      syncScrollInput();
+      if (maxScroll() > 0) element.scrollTop = maxScroll() * 0.5;
+      rawScrollOffset.current = 0.5;
     };
     // The chapter links are the keyboard route; the scroll container itself shouldn't be an unnamed Tab stop.
     element.tabIndex = -1;
     element.addEventListener("scroll", syncScrollInput, { passive: true });
     const frame = requestAnimationFrame(() => requestAnimationFrame(centerAtTrunk));
-    onConnectScroll((stage) => {
-      const maxScroll = element.scrollHeight - element.clientHeight;
-      const target = stage === "branches" ? 0.04 : stage === "trunk" ? 0.5 : 0.96;
-      if (maxScroll > 0) element.scrollTo({ top: maxScroll * target, behavior: reducedMotion ? "auto" : "smooth" });
-    });
+    onConnectScroll((stage) => scrollToOffset(chapterOffset[stage]));
     return () => {
       cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
       element.removeEventListener("scroll", syncScrollInput);
     };
   }, [onConnectScroll, reducedMotion, scroll.el]);
@@ -184,7 +227,10 @@ export function CameraController({
           bottom: rect.bottom - canvasRect.top,
         };
       }
+      const card = document.querySelector(".detail-card");
+      cardTop.current = card ? card.getBoundingClientRect().top - canvasRect.top : null;
     }
+    const portrait = size.width < size.height;
     const fullFraming = !intro.complete
       ? { x: 0, y: 0, z: 0 }
       : computeFraming({
@@ -213,8 +259,19 @@ export function CameraController({
       const nodeX = 1.45 + focus.position[0];
       const nodeY = -2.8 + focus.position[1];
       const nodeZ = focus.position[2];
-      focusedCamera.set(nodeX, cameraY, 6.5);
-      focusedTarget.set(nodeX, nodeY, nodeZ);
+      // On a portrait screen the note covers the lower part of the view: aim below the dot so it
+      // sits in the clear band between the header and the top of the note.
+      // The lift is kept while the note fades out, so the camera doesn't jump as the card leaves.
+      if (!portrait) focusLift.current = 0;
+      else if (cardTop.current !== null) {
+        const headerBottom = 70;
+        const clearCentre = (headerBottom + Math.max(cardTop.current, headerBottom + 80)) / 2;
+        const tanHalf = Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov / 2));
+        const unitsPerPixel = (Math.abs(6.5 - nodeZ) * tanHalf) / (size.height / 2);
+        focusLift.current = (size.height / 2 - clearCentre) * unitsPerPixel;
+      }
+      focusedCamera.set(nodeX, cameraY - focusLift.current, 6.5);
+      focusedTarget.set(nodeX, nodeY - focusLift.current, nodeZ);
       cameraPosition.lerpVectors(baseCamera, focusedCamera, zoom.current);
       lookTarget.lerpVectors(baseTarget, focusedTarget, zoom.current);
       if (!selectedNode && zoom.current < 0.012) focusNode.current = null;

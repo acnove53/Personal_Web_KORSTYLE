@@ -1,9 +1,9 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { ScrollControls } from "@react-three/drei";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { StageName } from "@/content/portfolio";
 import { CameraController } from "@/components/scene/camera-controller";
 import { createIntroTimeline, ImpactSplash, IntroSequence, SeedParticle, type IntroTimeline } from "@/components/scene/intro";
@@ -22,6 +22,7 @@ type PineSceneProps = {
   onHighlightId: (id: string | null) => void;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   onIntroComplete: () => void;
+  onIntroSprout: () => void;
   onAboutTextReveal: () => void;
   skipIntro: boolean;
   reducedMotion: boolean;
@@ -38,6 +39,7 @@ export function PineScene({
   onHighlightId,
   onConnectScroll,
   onIntroComplete,
+  onIntroSprout,
   onAboutTextReveal,
   skipIntro,
   reducedMotion,
@@ -64,6 +66,7 @@ export function PineScene({
       <directionalLight position={[-6, 9, 8]} intensity={1.4} color="#fffaf2" />
       <directionalLight position={[6, 3, -5]} intensity={0.45} color="#9d9a96" />
       <IntroSequence intro={intro} titleRef={introTitleRef} skip={skipIntro} />
+      <IntroSproutWatcher intro={intro} onSprout={onIntroSprout} />
       <SeedParticle intro={intro} />
       <ImpactSplash intro={intro} />
       {/* Only the HDR glow nodes exceed a luminance of 1; the paper and ink stay out of the bloom pass. */}
@@ -95,6 +98,17 @@ export function PineScene({
       </ScrollControls>
     </Canvas>
   );
+}
+
+// Tells the page once the tree starts drawing, so the header (and with it the name) can arrive with the tree.
+function IntroSproutWatcher({ intro, onSprout }: { intro: IntroTimeline; onSprout: () => void }) {
+  const notified = useRef(false);
+  useFrame(() => {
+    if (notified.current || (intro.phase !== "sprout" && intro.phase !== "complete")) return;
+    notified.current = true;
+    onSprout();
+  });
+  return null;
 }
 
 // Lives inside the Canvas so the tree geometry is only built in the browser, never during server rendering.
