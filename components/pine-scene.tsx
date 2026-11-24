@@ -23,6 +23,7 @@ type PineSceneProps = {
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   onIntroComplete: () => void;
   onIntroSprout: () => void;
+  onCreated: () => void;
   onAboutTextReveal: () => void;
   skipIntro: boolean;
   reducedMotion: boolean;
@@ -40,6 +41,7 @@ export function PineScene({
   onConnectScroll,
   onIntroComplete,
   onIntroSprout,
+  onCreated,
   onAboutTextReveal,
   skipIntro,
   reducedMotion,
@@ -60,6 +62,7 @@ export function PineScene({
       dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
       performance={{ min: 0.6 }}
+      onCreated={onCreated}
     >
       <color attach="background" args={["#f9f8f6"]} />
       <ambientLight intensity={1.5} />

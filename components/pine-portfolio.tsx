@@ -6,8 +6,10 @@ import { Component, useCallback, useEffect, useRef, useState, useSyncExternalSto
 import {
   aboutSummary,
   contact,
+  honors,
   portfolioEntries,
   role,
+  skillGroups,
   stageCopy,
   type PortfolioEntry,
   type StageName,
@@ -117,6 +119,8 @@ export function PinePortfolio() {
   const [introSkipped, setIntroSkipped] = useState(false);
   const [introSprouted, setIntroSprouted] = useState(false);
   const [sceneFailed, setSceneFailed] = useState(false);
+  const [sceneCreated, setSceneCreated] = useState(false);
+  const [overview, setOverview] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const introSeen = useIntroSeen();
   const webglSupported = useWebglSupport();
@@ -152,7 +156,9 @@ export function PinePortfolio() {
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeEntry();
+      if (event.key !== "Escape") return;
+      closeEntry();
+      setOverview(false);
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
@@ -167,6 +173,10 @@ export function PinePortfolio() {
     rememberIntroSeen();
   }, []);
 
+  const handleSceneCreated = useCallback(() => {
+    setSceneCreated(true);
+  }, []);
+
   const handleIntroSprout = useCallback(() => {
     setIntroSprouted(true);
   }, []);
@@ -178,7 +188,7 @@ export function PinePortfolio() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div id="top" className={`portfolio-shell ${shellState}`}>
+      <div id="top" className={`portfolio-shell ${shellState} ${overview ? "is-overview" : ""}`}>
         <div className="scene-backdrop" aria-hidden="true" />
 
         <header className="site-header">
@@ -191,6 +201,11 @@ export function PinePortfolio() {
           </a>
           <div className="header-right">
             <span className="availability"><i aria-hidden="true" /> OPEN TO OPPORTUNITIES</span>
+            {showScene && sceneReady && (
+              <button className="view-toggle" type="button" onClick={() => setOverview((value) => !value)} aria-pressed={overview}>
+                {overview ? "SEE THE TREE" : "QUICK OVERVIEW"}
+              </button>
+            )}
             <a className="contact-link" href={`mailto:${contact.email}`}>
               GET IN TOUCH <span aria-hidden="true">↗</span>
             </a>
@@ -228,6 +243,7 @@ export function PinePortfolio() {
                   onConnectScroll={connectScroll}
                   onIntroComplete={handleIntroComplete}
                   onIntroSprout={handleIntroSprout}
+                  onCreated={handleSceneCreated}
                   onAboutTextReveal={handleAboutTextReveal}
                   skipIntro={skipIntro}
                   reducedMotion={reducedMotion}
@@ -246,13 +262,19 @@ export function PinePortfolio() {
 
           {showScene && !nameHeadingShown && <h1 className="sr-only">{fullName}</h1>}
 
-          {showScene && (
+          {showScene && overview && (
+            <div className="overview-layer">
+              <PortfolioIndex includeAbout />
+            </div>
+          )}
+
+          {showScene && !overview && (
             <section className="sr-only" aria-label="Portfolio index">
               <PortfolioIndex />
             </section>
           )}
 
-          {showScene && !selected && stage === "trunk" && (
+          {showScene && !overview && !selected && stage === "trunk" && (
             // The layer centres the text; the section itself is left free for the reveal's transform.
             <div className="about-layer">
               <section
@@ -266,7 +288,7 @@ export function PinePortfolio() {
           )}
 
           <AnimatePresence mode="wait" initial={false}>
-            {sceneReady && !selected && stage !== "trunk" && (
+            {sceneReady && !overview && !selected && stage !== "trunk" && (
               <motion.section
                 key={stage}
                 ref={chapterTextRef}
@@ -282,7 +304,7 @@ export function PinePortfolio() {
           </AnimatePresence>
 
           <AnimatePresence>
-            {selected && (
+            {selected && !overview && (
               <DetailCard key="field-note" entry={selected} onClose={closeEntry} onOpen={openEntry} />
             )}
           </AnimatePresence>
@@ -294,7 +316,7 @@ export function PinePortfolio() {
         <div className="scene-caption" aria-hidden="true">
           <span className="caption-line" />
           <span>{stage === "branches" ? "THE CANOPY" : stage === "roots" ? "THE ROOT SYSTEM" : "THE LIVING STRUCTURE"}</span>
-          <span className="caption-coordinates">SEOUL&nbsp; 37°33′ N&nbsp; 126°58′ E</span>
+          <span className="caption-coordinates">ATLANTA&nbsp; 33°45′ N&nbsp; 84°23′ W</span>
         </div>
 
         <div className="scroll-cue" aria-hidden="true">
@@ -318,6 +340,22 @@ export function PinePortfolio() {
             ))}
           </span>
         </div>
+
+        {showScene && (
+          // Plain, server-rendered first paint: the name, role and links are on screen while the 3D chunk loads.
+          <div className={`static-hero ${sceneCreated ? "is-gone" : ""}`} aria-hidden={sceneCreated}>
+            <p className="static-kicker">SOFTWARE · AI · SYSTEMS</p>
+            <p className="static-name" aria-hidden="true">{fullName}<span className="title-period">.</span></p>
+            <p className="static-role">{role}</p>
+            <p className="static-links">
+              <a href={`mailto:${contact.email}`}>{contact.email}</a>
+              {contact.links.map((link) => (
+                <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label} ↗</a>
+              ))}
+            </p>
+            <p className="static-loading">Drawing the tree…</p>
+          </div>
+        )}
 
         {showScene && !sceneReady && !skipIntro && (
           <button className="skip-intro" type="button" onClick={() => setIntroSkipped(true)}>
@@ -432,6 +470,25 @@ function PortfolioIndex({ includeAbout = false }: { includeAbout?: boolean }) {
           <h1>{fullName}</h1>
           <p className="index-tagline">{role} · {stageCopy.trunk.note}</p>
           <p>{aboutSummary}</p>
+          <p className="index-links">
+            <a href={`mailto:${contact.email}`}>{contact.email}</a>
+            {contact.links.map((link) => (
+              <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label} ↗</a>
+            ))}
+          </p>
+        </section>
+      )}
+      {includeAbout && (
+        <section>
+          <h2>Skills</h2>
+          <dl className="index-skills">
+            {skillGroups.map((group) => (
+              <div key={group.label}>
+                <dt>{group.label}</dt>
+                <dd>{group.items}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
       )}
       {groups.map((group) => (
@@ -453,6 +510,18 @@ function PortfolioIndex({ includeAbout = false }: { includeAbout?: boolean }) {
           ))}
         </section>
       ))}
+      {includeAbout && (
+        <section>
+          <h2>Honors</h2>
+          {honors.map((item) => (
+            <article key={item.title}>
+              <p className="index-category">{item.date}</p>
+              <h3>{item.title}</h3>
+              <p>{item.detail}</p>
+            </article>
+          ))}
+        </section>
+      )}
     </div>
   );
 }

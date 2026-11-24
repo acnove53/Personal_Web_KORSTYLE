@@ -29,6 +29,19 @@ export const contact: {
   ],
 };
 
+export const skillGroups: { label: string; items: string }[] = [
+  { label: "AI / ML", items: "PyTorch, JAX, NumPy, Flax NNX, Computer Vision, NLP/LLMs, Model Training & Evaluation, AWS Bedrock" },
+  { label: "Languages & frameworks", items: "Python, C/C++, Java, SQL, JavaScript/TypeScript, React Native, Django, Express" },
+  { label: "Databases", items: "PostgreSQL, SQLite, MongoDB, DynamoDB, Drizzle ORM" },
+  { label: "Cloud & tools", items: "AWS (API Gateway, Lambda, S3, SSM, KMS), Docker, OpenAPI, REST, Git/GitHub, Agile/Scrum, Linux/PACE HPC, Appwrite" },
+];
+
+export const honors: { title: string; detail: string; date: string }[] = [
+  { title: "Faculty Honors", detail: "Georgia Institute of Technology, perfect 4.0 term", date: "Fall 2025" },
+  { title: "Army Achievement Medal", detail: "U.S. Department of the Army, awarded twice for leadership and cross-cultural communication", date: "Mar, Jul 2025" },
+  { title: "ByteFight 2026 Tournament", detail: "AI strategy developer, autonomous agent under strict compute limits", date: "Mar – Apr 2026" },
+];
+
 export const role = "Full-stack & AI engineer";
 
 // mark: 上 (top), 中 (middle), 下 (bottom) — where each chapter sits on the tree.
