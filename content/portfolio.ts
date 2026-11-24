@@ -15,21 +15,21 @@ export type PortfolioEntry = {
   stage: "branches" | "roots";
 };
 
-// TODO: replace the placeholder email and fill in the profile and résumé links before publishing.
-// Links appear in the About text and the footer as soon as they are filled in.
+// Links appear in the About text and the footer. To add a résumé link, put the PDF in public/resume.pdf and
+// uncomment the Résumé line; add LinkedIn the same way.
 export const contact: {
   email: string;
   links: { label: string; href: string }[];
 } = {
-  email: "hello@jinyoungjeon.dev",
+  email: "jjeon99@gatech.edu",
   links: [
-    // { label: "GitHub", href: "https://github.com/..." },
+    { label: "GitHub", href: "https://github.com/acnove53" },
     // { label: "LinkedIn", href: "https://www.linkedin.com/in/..." },
     // { label: "Résumé", href: "/resume.pdf" },
   ],
 };
 
-export const role = "Full-stack & AI engineer at NorthBound College";
+export const role = "Full-stack & AI engineer";
 
 // mark: 上 (top), 中 (middle), 下 (bottom) — where each chapter sits on the tree.
 export const stageCopy: Record<StageName, { mark: string; chapter: string; title: string; note: string }> = {
@@ -62,10 +62,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "01",
     title: "TimeSlips AI-Integrated Mobile App",
     short: "TimeSlips",
-    category: "CURRENT PROJECT · AI / CARE",
+    category: "SEP 2026 – PRESENT · AI / CARE",
     description: "An AI coaching platform that helps care facilitators build more meaningful moments with people living with dementia. Designed around a calm mobile workflow, with serverless services supporting timely, context-aware guidance.",
     stack: ["React Native", "AWS Serverless", "AWS Bedrock"],
-    highlights: ["Context-aware coaching for care facilitators", "Scalable cloud-native architecture"],
+    highlights: ["Real-time session sync on API Gateway, Lambda and DynamoDB", "Bedrock AI coach keeps sensitive transcripts away from public LLMs", "On-device speech-to-text (ExecuTorch, Whisper) with zero-trust Appwrite OAuth"],
     stage: "branches",
   },
   {
@@ -73,9 +73,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "02",
     title: "AI-Powered Travel Health Coach",
     short: "Travel Health Coach",
-    category: "PERSONAL PROJECT · AI / HEALTH",
+    category: "APR 2026 · CLAUDE BUILDER CLUB · AI / HEALTH",
     description: "A context-aware recommendation agent that helps travelers make dietary and health choices with local context in mind. Prompt design connects itinerary, food, and personal needs into a practical coaching experience.",
     stack: ["Python", "LLMs", "Prompt Design"],
+    highlights: ["Compares food options in transit versus at home"],
     stage: "branches",
   },
   {
@@ -83,10 +84,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "03",
     title: "Neural Networks & Vision Pipelines",
     short: "Vision Pipelines",
-    category: "RESEARCH · MACHINE LEARNING",
+    category: "MAR – APR 2026 · MACHINE LEARNING",
     description: "From manually implementing backpropagation for a three-layer neural network in JAX to fine-tuning VGG19 on the PACE H100 cluster, these experiments explore how learning systems behave from the inside out.",
     stack: ["JAX", "VGG19", "PACE H100"],
-    highlights: ["Classified 75 butterfly species", "Built backpropagation from scratch"],
+    highlights: ["97.7% MNIST accuracy from a from-scratch JAX network", "Classified 75 butterfly species at over 90% validation accuracy", "Trained at scale on Georgia Tech’s PACE H100 cluster"],
     stage: "branches",
   },
   {
@@ -94,9 +95,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "04",
     title: "ByteFight 2026 Autonomous Agent",
     short: "ByteFight Agent",
-    category: "COMPETITION · AUTONOMOUS SYSTEMS",
+    category: "MAR – APR 2026 · COMPETITION",
     description: "A Python strategy agent that reasons about a changing game state and makes decisions under strict compute-time limits. Custom pathfinding heuristics help balance search depth with fast, reliable moves.",
     stack: ["Python", "Pathfinding", "Heuristics"],
+    highlights: ["Custom pathfinding and stamina-optimization logic"],
     stage: "branches",
   },
   {
@@ -104,10 +106,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "05",
     title: "JobJoe",
     short: "JobJoe",
-    category: "TEAM PROJECT · WEB PLATFORM",
-    description: "A Django platform for organizing the job search, backed by a carefully structured SQLite database. As Scrum Master, I coordinated the team through two-week sprints and kept delivery focused.",
+    category: "AUG – DEC 2025 · TEAM PROJECT",
+    description: "A global job-matching engine built on Django and backed by a carefully structured SQLite database. As Scrum Master, I led a team of five and kept delivery focused.",
     stack: ["Django", "SQLite", "Scrum"],
-    highlights: ["Optimized relational data model", "Facilitated two-week sprint cycles"],
+    highlights: ["Optimized relational data model", "Led a 5-member team as Scrum Master"],
     stage: "branches",
   },
   {
@@ -115,10 +117,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "06",
     title: "NorthBound College",
     short: "NorthBound",
-    category: "FULL-STACK ENGINEER · CURRENT",
+    category: "FULL-STACK ENGINEER · JUN – AUG 2026",
     description: "Engineered an AI-powered college admissions platform. I built typed data boundaries around model and API interactions so fast-moving product work could stay predictable and maintainable.",
     stack: ["Express", "PostgreSQL", "Gemini API", "Zod"],
-    highlights: ["Enforced structured pipelines with Zod", "Documented APIs with OpenAPI 3.1"],
+    highlights: ["SSE-streaming AI Consultant and School Advisor on Gemini", "Zod and OpenAPI 3.1 as the single source of truth for API and LLM output"],
     stage: "roots",
   },
   {
@@ -126,10 +128,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "07",
     title: "19th ESC · U.S. Forces Korea",
     short: "KATUSA · USFK",
-    category: "KATUSA · SERGEANT",
-    description: "Served as consecutive and simultaneous interpreter for the Command Sergeant Major. I bridged cultural gaps, supported leadership communications, and helped keep information moving across a force of more than 500 personnel.",
+    category: "MAR 2024 – JUL 2025 · SERGEANT",
+    description: "Served as consecutive and simultaneous interpreter for the Command Sergeant Major. I bridged cultural gaps, supported leadership communications, and served as primary Executive Assistant, and led diplomatic ceremonies for 500+ personnel.",
     stack: ["Interpretation", "Leadership", "Communication"],
-    highlights: ["Supported communications for 500+ personnel", "Bridged Korean and U.S. military cultures"],
+    highlights: ["Interpreted at ROK-US combined exercises and ceremonies", "Led ceremonies for 500+ personnel and peer-counseled junior soldiers", "Army Achievement Medal, awarded twice (2025)"],
     stage: "roots",
   },
   {
@@ -137,10 +139,10 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "08",
     title: "Georgia Institute of Technology",
     short: "Georgia Tech",
-    category: "B.S. COMPUTER SCIENCE · 2025",
-    description: "Studied Computer Science with concentrations in Intelligence and Devices. Faculty Honors and a 3.92 GPA reflect a sustained interest in the boundary where software meets physical systems.",
+    category: "B.S. COMPUTER SCIENCE · 2023 – 2027",
+    description: "Studying Computer Science on the Intelligence and Devices threads. A 3.91 GPA and Faculty Honors reflect a sustained interest in the boundary where software meets physical systems.",
     stack: ["Intelligence", "Devices", "Hardware / Software"],
-    highlights: ["Faculty Honors · 3.92 / 4.00 GPA", "Focus on hardware-software co-design"],
+    highlights: ["3.91 / 4.00 GPA", "Faculty Honors, Fall 2025 (perfect 4.0 term)"],
     stage: "roots",
   },
 ];

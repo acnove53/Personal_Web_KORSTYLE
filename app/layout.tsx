@@ -23,7 +23,7 @@ const mono = JetBrains_Mono({
 
 const title = "Jinyoung Daniel Jeon — Software & AI Engineer";
 const description =
-  "Full-stack & AI engineer at NorthBound College. A portfolio drawn as an ink-wash pine: projects in the canopy, experience in the roots.";
+  "Full-stack & AI engineer. A portfolio drawn as an ink-wash pine: projects in the canopy, experience in the roots.";
 
 // The public address, for absolute link-preview URLs: set SITE_URL (e.g. https://example.com) where the site
 // is deployed. On Vercel the production domain is picked up automatically.

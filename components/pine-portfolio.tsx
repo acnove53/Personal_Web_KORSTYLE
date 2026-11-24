@@ -373,7 +373,7 @@ function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlig
           </button>
         </div>
         <p className="hero-meta">
-          ATLANTA, GA <span aria-hidden="true">·</span> GEORGIA TECH CS ’25
+          ATLANTA, GA <span aria-hidden="true">·</span> GEORGIA TECH CS ’27
           {contact.links.map((link) => (
             <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label.toUpperCase()} ↗</a>
           ))}
