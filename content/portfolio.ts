@@ -15,8 +15,8 @@ export type PortfolioEntry = {
   stage: "branches" | "roots";
 };
 
-// Links appear in the About text and the footer. To add a résumé link, put the PDF in public/resume.pdf and
-// uncomment the Résumé line; add LinkedIn the same way.
+// Links appear in the About text and the footer. The résumé PDF lives in public/Jinyoung_Jeon_Resume.pdf; add LinkedIn
+// the same way.
 export const contact: {
   email: string;
   links: { label: string; href: string }[];
@@ -25,7 +25,7 @@ export const contact: {
   links: [
     { label: "GitHub", href: "https://github.com/acnove53" },
     // { label: "LinkedIn", href: "https://www.linkedin.com/in/..." },
-    // { label: "Résumé", href: "/resume.pdf" },
+    { label: "Résumé", href: "/Jinyoung_Jeon_Resume.pdf" },
   ],
 };
 
