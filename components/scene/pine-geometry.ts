@@ -21,6 +21,12 @@ export type PerchPoint = {
   path: THREE.Vector3[];
 };
 
+// A knothole on the camera-facing side of the trunk: where it is, which way the bark faces, and roughly how big.
+export type HollowSpot = {
+  position: THREE.Vector3;
+  normal: THREE.Vector3;
+};
+
 export type PineGeometry = {
   structure: THREE.BufferGeometry;
   canopy: THREE.BufferGeometry;
@@ -29,6 +35,7 @@ export type PineGeometry = {
   washes: FoliageSprite[];
   nodePositions: Record<string, THREE.Vector3>;
   perches: PerchPoint[];
+  hollow: HollowSpot;
 };
 
 // How much armor-plate bark each part carries (see createInkTrunkMaterial).
@@ -85,6 +92,21 @@ const groundStrips: { id: string; from: [number, number]; to: [number, number] }
   { id: "ground-b", from: [1.0, 1.0], to: [2.3, 1.0] },
   { id: "ground-d", from: [1.5, 0.7], to: [2.6, 0.8] },
 ];
+
+// Casts a ray at the trunk from the camera side and returns the bark it hits at the hollow's height.
+const hollowHeight = 2.5;
+
+function findHollowSpot(structure: THREE.BufferGeometry): HollowSpot {
+  const centre = trunkCenterAt(hollowHeight);
+  const mesh = new THREE.Mesh(structure, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  mesh.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster(new THREE.Vector3(centre.x, hollowHeight, 4), new THREE.Vector3(0, 0, -1));
+  const hit = raycaster.intersectObject(mesh, false)[0];
+  if (!hit) return { position: new THREE.Vector3(centre.x, hollowHeight, centre.z + 0.5), normal: new THREE.Vector3(0, 0, 1) };
+  const normal = (hit.face?.normal ?? new THREE.Vector3(0, 0, 1)).clone().normalize();
+  if (normal.z < 0) normal.negate();
+  return { position: hit.point.clone(), normal };
+}
 
 // The height of the cliff top under (x, z), by casting a ray straight down onto the cliff geometry.
 function createGroundSampler(cliff: THREE.BufferGeometry) {
@@ -613,6 +635,8 @@ export function buildPineGeometry() {
     }
   }
 
+  const structure = mergeTubeGeometries(structureParts);
+  const hollow = findHollowSpot(structure);
   const groundHeight = createGroundSampler(cliff);
   for (const strip of groundStrips) {
     const path = [0, 1, 2, 3, 4].map((step) => {
@@ -631,12 +655,13 @@ export function buildPineGeometry() {
   }
 
   return {
-    structure: mergeTubeGeometries(structureParts),
+    structure,
     canopy: mergeTubeGeometries(canopyParts),
     cliff,
     needles,
     washes,
     nodePositions,
     perches,
+    hollow,
   };
 }

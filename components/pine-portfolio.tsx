@@ -2,15 +2,18 @@
 
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import dynamic from "next/dynamic";
+import { HollowStage } from "@/components/hollow-stage";
 import { Component, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   aboutSummary,
   contact,
   honors,
   portfolioEntries,
+  selfPortrait,
   role,
   skillGroups,
   stageCopy,
+  tmiCards,
   type PortfolioEntry,
   type StageName,
 } from "@/content/portfolio";
@@ -121,6 +124,7 @@ export function PinePortfolio() {
   const [sceneFailed, setSceneFailed] = useState(false);
   const [sceneCreated, setSceneCreated] = useState(false);
   const [overview, setOverview] = useState(false);
+  const [hollowOpen, setHollowOpen] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const introSeen = useIntroSeen();
   const webglSupported = useWebglSupport();
@@ -154,15 +158,30 @@ export function PinePortfolio() {
     }));
   }, []);
 
+  // The hollow in the trunk: the camera flies in and the owner steps out with a few personal things.
+  const openHollow = useCallback(() => {
+    setSelectedId(null);
+    setOverview(false);
+    setHighlightedId(null);
+    setHollowOpen(true);
+  }, []);
+  const closeHollow = useCallback(() => {
+    setHollowOpen(false);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".hollow-action")?.focus({ preventScroll: true });
+    }));
+  }, []);
+
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       closeEntry();
+      closeHollow();
       setOverview(false);
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [closeEntry]);
+  }, [closeEntry, closeHollow]);
 
   const handleAboutTextReveal = useCallback(() => {
     setAboutTextRevealed(true);
@@ -184,11 +203,11 @@ export function PinePortfolio() {
   const shellState = showScene
     ? `${sceneReady ? "scene-ready" : ""} ${introSprouted ? "intro-sprouted" : ""}`
     : "scene-ready scene-fallback";
-  const nameHeadingShown = showScene && !selected && stage === "trunk";
+  const nameHeadingShown = showScene && !selected && !hollowOpen && stage === "trunk";
 
   return (
     <MotionConfig reducedMotion="user">
-      <div id="top" className={`portfolio-shell ${shellState} ${overview ? "is-overview" : ""}`}>
+      <div id="top" className={`portfolio-shell ${shellState} ${overview ? "is-overview" : ""} ${hollowOpen ? "is-hollow" : ""}`}>
         <div className="scene-backdrop" aria-hidden="true" />
 
         <header className="site-header">
@@ -250,6 +269,9 @@ export function PinePortfolio() {
                   introTitleRef={introTitleRef}
                   aboutTextRef={aboutTextRef}
                   chapterTextRef={chapterTextRef}
+                  hollowOpen={hollowOpen}
+                  onOpenHollow={openHollow}
+                  onCloseHollow={closeHollow}
                 />
               </SceneErrorBoundary>
             </div>
@@ -274,7 +296,7 @@ export function PinePortfolio() {
             </section>
           )}
 
-          {showScene && !overview && !selected && stage === "trunk" && (
+          {showScene && !overview && !selected && !hollowOpen && stage === "trunk" && (
             // The layer centres the text; the section itself is left free for the reveal's transform.
             <div className="about-layer">
               <section
@@ -282,7 +304,7 @@ export function PinePortfolio() {
                 className={`chapter-trunk ${aboutTextRevealed ? "" : "chapter-intro-pending"}`}
                 aria-hidden={!aboutTextRevealed}
               >
-                <ChapterContent stage="trunk" scrollToStage={scrollToStage} onOpen={openEntry} highlightedId={null} onHighlight={setHighlightedId} />
+                <ChapterContent stage="trunk" scrollToStage={scrollToStage} onOpen={openEntry} highlightedId={null} onHighlight={setHighlightedId} onOpenHollow={openHollow} />
               </section>
             </div>
           )}
@@ -298,9 +320,13 @@ export function PinePortfolio() {
                 exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
                 transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
               >
-                <ChapterContent stage={stage} scrollToStage={scrollToStage} onOpen={openEntry} highlightedId={highlightedId} onHighlight={setHighlightedId} />
+                <ChapterContent stage={stage} scrollToStage={scrollToStage} onOpen={openEntry} highlightedId={highlightedId} onHighlight={setHighlightedId} onOpenHollow={openHollow} />
               </motion.section>
             )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showScene && hollowOpen && <HollowStage key="hollow" onClose={closeHollow} reducedMotion={reducedMotion} />}
           </AnimatePresence>
 
           <AnimatePresence>
@@ -372,12 +398,13 @@ export function PinePortfolio() {
   );
 }
 
-function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlight }: {
+function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlight, onOpenHollow }: {
   stage: StageName;
   scrollToStage: ((stage: StageName) => void) | null;
   highlightedId: string | null;
   onOpen: (id: string) => void;
   onHighlight: (id: string | null) => void;
+  onOpenHollow: () => void;
 }) {
   const copy = stageCopy[stage];
   const eyebrow = (
@@ -402,6 +429,9 @@ function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlig
           </button>
           <button className="text-action" type="button" onClick={() => scrollToStage?.("roots")}>
             <span aria-hidden="true">↓</span> EXPERIENCE
+          </button>
+          <button className="text-action" type="button" onClick={onOpenHollow}>
+            <span aria-hidden="true">●</span> THINGS ABOUT ME
           </button>
         </div>
         <p className="hero-meta">
@@ -504,6 +534,25 @@ function PortfolioIndex({ includeAbout = false }: { includeAbout?: boolean }) {
           ))}
         </section>
       ))}
+      {includeAbout && (
+        <section>
+          <h2>A few things about me</h2>
+          <figure className="index-portrait">
+            <img src={selfPortrait.src} alt={selfPortrait.alt} loading="lazy" decoding="async" />
+          </figure>
+          {tmiCards.map((card) => (
+            <article key={card.title}>
+              <h3>{card.title}</h3>
+              <p>{card.text}</p>
+              {card.photos && (
+                <div className="index-photos">
+                  {card.photos.map((item) => <img key={item.src} src={item.src} alt={item.alt} loading="lazy" decoding="async" />)}
+                </div>
+              )}
+            </article>
+          ))}
+        </section>
+      )}
       {includeAbout && (
         <section>
           <h2>Honors</h2>

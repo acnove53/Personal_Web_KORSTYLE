@@ -10,6 +10,7 @@ import { createIntroTimeline, ImpactSplash, IntroSequence, SeedParticle, type In
 import { InkLandscape } from "@/components/scene/landscape";
 import { buildPineGeometry } from "@/components/scene/pine-geometry";
 import { createPortfolioNodes, PineTree } from "@/components/scene/pine-tree";
+import { TrunkHollow } from "@/components/scene/trunk-hollow";
 import { Sparrows } from "@/components/scene/sparrows";
 import type { PortfolioNode } from "@/components/scene/types";
 
@@ -31,6 +32,9 @@ type PineSceneProps = {
   introTitleRef: { current: HTMLDivElement | null };
   aboutTextRef: { current: HTMLElement | null };
   chapterTextRef: { current: HTMLElement | null };
+  hollowOpen: boolean;
+  onOpenHollow: () => void;
+  onCloseHollow: () => void;
 };
 
 export function PineScene({
@@ -49,6 +53,9 @@ export function PineScene({
   introTitleRef,
   aboutTextRef,
   chapterTextRef,
+  hollowOpen,
+  onOpenHollow,
+  onCloseHollow,
 }: PineSceneProps) {
   const [nodesReady, setNodesReady] = useState(false);
   const handleIntroComplete = useCallback(() => {
@@ -98,6 +105,9 @@ export function PineScene({
           onSelectId={onSelectId}
           onConnectScroll={onConnectScroll}
           reducedMotion={reducedMotion}
+          hollowOpen={hollowOpen}
+          onOpenHollow={onOpenHollow}
+          onCloseHollow={onCloseHollow}
         />
       </ScrollControls>
     </Canvas>
@@ -130,6 +140,9 @@ function TreeWithCamera({
   onSelectId,
   onConnectScroll,
   reducedMotion,
+  hollowOpen,
+  onOpenHollow,
+  onCloseHollow,
 }: {
   intro: IntroTimeline;
   nodesReady: boolean;
@@ -144,6 +157,9 @@ function TreeWithCamera({
   onSelectId: (id: string | null) => void;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   reducedMotion: boolean;
+  hollowOpen: boolean;
+  onOpenHollow: () => void;
+  onCloseHollow: () => void;
 }) {
   const geometry = useMemo(() => buildPineGeometry(), []);
   const nodes = useMemo(() => createPortfolioNodes(geometry), [geometry]);
@@ -164,6 +180,9 @@ function TreeWithCamera({
         onSelectNode={onSelectNode}
         onConnectScroll={onConnectScroll}
         reducedMotion={reducedMotion}
+        hollow={geometry.hollow}
+        hollowOpen={hollowOpen}
+        onCloseHollow={onCloseHollow}
       />
       <InkLandscape intro={intro} reducedMotion={reducedMotion} />
       <PineTree
@@ -176,7 +195,8 @@ function TreeWithCamera({
         onHighlightId={onHighlightId}
         onSelectNode={onSelectNode}
       />
-      <Sparrows perches={geometry.perches} intro={intro} reducedMotion={reducedMotion} selectedId={selectedId} />
+      <TrunkHollow hollow={geometry.hollow} intro={intro} open={hollowOpen} onOpen={onOpenHollow} />
+      <Sparrows perches={geometry.perches} intro={intro} reducedMotion={reducedMotion} selectedId={selectedId ?? (hollowOpen ? "hollow" : null)} />
     </>
   );
 }

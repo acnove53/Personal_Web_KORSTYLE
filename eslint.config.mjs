@@ -11,6 +11,12 @@ const eslintConfig = defineConfig([
     files: ["components/pine-scene.tsx", "components/scene/**"],
     rules: { "react-hooks/immutability": "off" },
   },
+  {
+    // The personal photos are resized once into public/tmi, and the site is a static export where next/image
+    // cannot optimise anything at request time, so plain <img> is the right tool.
+    files: ["components/pine-portfolio.tsx", "components/hollow-stage.tsx"],
+    rules: { "@next/next/no-img-element": "off" },
+  },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 ]);
 

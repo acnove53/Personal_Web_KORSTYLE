@@ -9,9 +9,12 @@ import type { StageName } from "@/content/portfolio";
 import { computeFraming, type ScreenRect } from "./framing";
 import type { IntroTimeline } from "./intro";
 import { smoothStep } from "./math";
+import type { HollowSpot } from "./pine-geometry";
 import type { PortfolioNode } from "./types";
 
 const treeOrigin = new THREE.Vector3(1.45, -2.8, 0);
+// How close the camera comes to the hollow in the trunk.
+const hollowDistance = 2.1;
 // Scroll offsets each chapter settles on: the canopy at the top, the trunk (About) in the middle, the roots below.
 const chapterOffset: Record<StageName, number> = { branches: 0.04, trunk: 0.5, roots: 0.96 };
 const chapterOffsets = [chapterOffset.branches, chapterOffset.trunk, chapterOffset.roots];
@@ -28,6 +31,9 @@ export function CameraController({
   onSelectNode,
   onConnectScroll,
   reducedMotion,
+  hollow,
+  hollowOpen,
+  onCloseHollow,
 }: {
   intro: IntroTimeline;
   nodes: PortfolioNode[];
@@ -40,6 +46,9 @@ export function CameraController({
   onSelectNode: (node: PortfolioNode | null) => void;
   onConnectScroll: (scrollToStage: (stage: StageName) => void) => void;
   reducedMotion: boolean;
+  hollow: HollowSpot;
+  hollowOpen: boolean;
+  onCloseHollow: () => void;
 }) {
   const scroll = useScroll();
   const lastStage = useRef<StageName>("trunk");
@@ -49,6 +58,7 @@ export function CameraController({
   const zoom = useRef(0);
   const rawScrollOffset = useRef(0.5);
   const focusNode = useRef<PortfolioNode | null>(null);
+  const focusHollow = useRef(false);
   const dismissedNode = useRef<string | null>(null);
   const baseCamera = useMemo(() => new THREE.Vector3(), []);
   const baseTarget = useMemo(() => new THREE.Vector3(), []);
@@ -166,8 +176,12 @@ export function CameraController({
       onSelectNode(null);
     }
 
-    const targetZoom = selectedNode ? 1 : 0;
-    zoom.current = follow(zoom.current, targetZoom, selectedNode ? 2.5 : 3.4, delta);
+    // The hollow in the trunk is its own focus: opening it flies the camera into the bark.
+    if (hollowOpen) focusHollow.current = true;
+    if (hollowOpen && Math.abs(offset - 0.5) > 0.18) onCloseHollow();
+    const focused = Boolean(selectedNode) || hollowOpen;
+    const targetZoom = focused ? 1 : 0;
+    zoom.current = follow(zoom.current, targetZoom, focused ? 2.5 : 3.4, delta);
 
     // The center page is the trunk; offset 0 is the canopy and 1 is the roots.
     // Camera Y is assigned directly from ScrollControls every frame.
@@ -257,7 +271,13 @@ export function CameraController({
     cameraPosition.copy(baseCamera);
     lookTarget.copy(baseTarget);
 
-    if (focusNode.current) {
+    if (focusHollow.current) {
+      focusedCamera.set(treeOrigin.x + hollow.position.x, treeOrigin.y + hollow.position.y, hollow.position.z + hollowDistance);
+      focusedTarget.set(treeOrigin.x + hollow.position.x, treeOrigin.y + hollow.position.y, hollow.position.z);
+      cameraPosition.lerpVectors(baseCamera, focusedCamera, zoom.current);
+      lookTarget.lerpVectors(baseTarget, focusedTarget, zoom.current);
+      if (!hollowOpen && zoom.current < 0.012) focusHollow.current = false;
+    } else if (focusNode.current) {
       const focus = focusNode.current;
       const nodeX = 1.45 + focus.position[0];
       const nodeY = -2.8 + focus.position[1];

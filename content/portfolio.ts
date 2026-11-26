@@ -44,6 +44,58 @@ export const honors: { title: string; detail: string; date: string }[] = [
   { title: "ByteFight 2026 Tournament", detail: "AI strategy developer, autonomous agent under strict compute limits", date: "Mar – Apr 2026" },
 ];
 
+// A few personal things, shown from the hollow in the trunk. Photos live in public/tmi (resized, no metadata).
+const photoBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const photo = (name: string, alt: string) => ({ src: `${photoBase}/tmi/${name}.jpg`, alt });
+// The portrait is a one-off ink-wash rendering of a photo, with a painted, uneven edge (a PNG with transparency).
+const inkPortrait = (name: string, alt: string) => ({ src: `${photoBase}/tmi/${name}.png`, alt });
+
+export type TmiCard = {
+  title: string;
+  text: string;
+  photos?: { src: string; alt: string }[];
+};
+
+export const selfPortrait = inkPortrait("me-ink", "An ink-wash portrait of Jinyoung smiling in a beanie, standing by a mountain lake");
+
+export const tmiCards: TmiCard[] = [
+  {
+    title: "Mountains, lakes and long hikes",
+    text: "My favorite place in the world is Banff, in the Rockies near Calgary. I love being out in nature, mountains most of all: hiking up to a good view, and fishing whenever there is water nearby.",
+    photos: [
+      photo("banff-view", "The town of Banff in the valley below a big mountain"),
+      photo("lookout", "At a mountain lookout above Banff"),
+      photo("lake-louise", "Standing at Lake Louise with hands on a beanie"),
+      photo("forest", "A forested mountainside under a cloudy sky"),
+      photo("fishing", "Holding up a redfish on a fishing boat"),
+      photo("chipmunk", "A small striped squirrel on a trail"),
+    ],
+  },
+  {
+    title: "The peer counselor",
+    text: "In the army I was a peer counselor: regular check-ins with the soldiers around me, juniors and seniors alike, and extra time for the ones who were having a hard time.",
+    photos: [photo("army", "Army portrait in front of the U.S. and Korean flags")],
+  },
+  {
+    title: "Big dogs, small zoo",
+    text: "I love animals, big dogs most of all. At the moment I share a home with my roommate's big cat and a small Mexican xolo.",
+    photos: [
+      photo("cat-nap", "The big cat asleep on a blanket"),
+      photo("cat-belly", "The same cat, belly up on the bed"),
+      photo("xolo", "A small xolo puppy held gently by the chin"),
+    ],
+  },
+  {
+    title: "Bass on Sundays",
+    text: "I play acoustic guitar and bass. These days I serve on my church's worship team on bass.",
+  },
+  {
+    title: "Always moving",
+    text: "Four days a week at the gym and two running. I have run a 10K and I am training for a 20K. A little soccer when it comes up, and a big Manchester United fan.",
+    photos: [photo("gym", "A mirror selfie at the gym with a rack of dumbbells")],
+  },
+];
+
 export const role = "Full-stack & AI engineer";
 
 // mark: 上 (top), 中 (middle), 下 (bottom) — where each chapter sits on the tree.
