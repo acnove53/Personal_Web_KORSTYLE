@@ -10,6 +10,7 @@ import { createIntroTimeline, ImpactSplash, IntroSequence, SeedParticle, type In
 import { InkLandscape } from "@/components/scene/landscape";
 import { buildPineGeometry } from "@/components/scene/pine-geometry";
 import { createPortfolioNodes, PineTree } from "@/components/scene/pine-tree";
+import { Sparrows } from "@/components/scene/sparrows";
 import type { PortfolioNode } from "@/components/scene/types";
 
 export type { PortfolioNode } from "@/components/scene/types";
@@ -175,6 +176,7 @@ function TreeWithCamera({
         onHighlightId={onHighlightId}
         onSelectNode={onSelectNode}
       />
+      <Sparrows perches={geometry.perches} intro={intro} reducedMotion={reducedMotion} selectedId={selectedId} />
     </>
   );
 }

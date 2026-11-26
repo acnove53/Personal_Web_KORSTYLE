@@ -10,6 +10,13 @@ export type FoliageSprite = {
   tilt: number;
 };
 
+// A spot on a bare stretch of limb where a sparrow can stand: the top of the wood, and the way the branch runs.
+export type PerchPoint = {
+  id: string;
+  position: THREE.Vector3;
+  tangent: THREE.Vector3;
+};
+
 export type PineGeometry = {
   structure: THREE.BufferGeometry;
   canopy: THREE.BufferGeometry;
@@ -17,6 +24,7 @@ export type PineGeometry = {
   needles: FoliageSprite[];
   washes: FoliageSprite[];
   nodePositions: Record<string, THREE.Vector3>;
+  perches: PerchPoint[];
 };
 
 // How much armor-plate bark each part carries (see createInkTrunkMaterial).
@@ -49,6 +57,21 @@ const trunkAnchors = [
   new THREE.Vector3(0.15, 4.5, -0.1),
   new THREE.Vector3(-0.1, 5.2, -0.15),
 ];
+
+function radiusAt(stops: RadiusStop[], t: number) {
+  for (let index = 1; index < stops.length; index += 1) {
+    const [t1, r1] = stops[index];
+    if (t <= t1) {
+      const [t0, r0] = stops[index - 1];
+      return r0 + ((r1 - r0) * (t - t0)) / (t1 - t0 || 1);
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+
+// Limbs that carry perches: the long, bare stretches before the needle clusters, at these fractions of their length.
+const perchLimbs = ["timeslips", "travel-health", "bytefight", "jobjoe"];
+const perchStops = [0.46, 0.66];
 
 type LimbSpec = {
   from: number;
@@ -393,6 +416,7 @@ export function buildPineGeometry() {
   const needles: FoliageSprite[] = [];
   const washes: FoliageSprite[] = [];
   const nodePositions: Record<string, THREE.Vector3> = {};
+  const perches: PerchPoint[] = [];
   structureParts.push(makeOrganicTube(trunkSpline, 0.7, trunkRadius, 30, 150, 0.8, 0.14, barkAmount.trunk, { flutes: 7, fluteDepth: 0.13, twist: 0.32 }));
   structureParts.push(makeRock());
 
@@ -504,6 +528,16 @@ export function buildPineGeometry() {
     canopyParts.push(makeOrganicTube(limbCurve, limb.radius, branchRadius, 14, 72, limb.seed, 0.24, barkAmount.limb, {
       flutes: 4, fluteDepth: 0.12, twist: 0.6,
     }));
+    if (limb.node && perchLimbs.includes(limb.node)) {
+      for (const [perchIndex, t] of perchStops.entries()) {
+        const point = limbCurve.getPointAt(t);
+        const tangent = limbCurve.getTangentAt(t);
+        // Stand on top of the wood, and a little toward the viewer so the bird is drawn in front of needles.
+        point.y += limb.radius * radiusAt(branchRadius, t) * 0.8;
+        point.z += 0.16;
+        perches.push({ id: `${limb.node}-${perchIndex}`, position: point, tangent });
+      }
+    }
     const end = limbCurve.getPointAt(1);
     const side = Math.sign(end.x - trunkPoint.x) || 1;
     const depth = end.z;
@@ -548,5 +582,6 @@ export function buildPineGeometry() {
     needles,
     washes,
     nodePositions,
+    perches,
   };
 }
