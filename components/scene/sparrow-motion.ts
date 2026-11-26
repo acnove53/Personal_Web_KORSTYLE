@@ -340,23 +340,42 @@ export function stepPerched(brain: Brain, dt: number, pose: RigPose, surface: Su
 
 export type FlightPhase = "takeoff" | "cruise" | "landing";
 
+// How a bird arrives: the bounding flight, a slow, hovering one, or a wings-spread swoop that zigzags down.
+export type ApproachStyle = "direct" | "slow" | "swoop";
+
+export const approachStyles: Record<ApproachStyle, { speed: number; braking: number; endSpeed: number }> = {
+  direct: { speed: 1, braking: 0.7, endSpeed: 0.35 },
+  slow: { speed: 0.5, braking: 0.45, endSpeed: 0.25 },
+  swoop: { speed: 0.72, braking: 0.6, endSpeed: 0.3 },
+};
+
 // One frame of a bird in the air. Returns a vertical offset for the bounding flight path (climb while flapping,
 // sink while gliding).
 export function stepFlight(
   brain: Brain,
   dt: number,
   pose: RigPose,
-  info: { phase: FlightPhase; progress: number; elapsed: number; vx: number; vy: number },
+  info: { phase: FlightPhase; progress: number; elapsed: number; vx: number; vy: number; style?: ApproachStyle },
 ) {
   const profile = brain.profile;
   resetPose(pose);
   const { phase, progress, elapsed } = info;
+  const style = info.style ?? "direct";
 
   let rate = profile.cruiseRate;
   if (phase === "takeoff") rate = tuning.takeoff.flapRate;
   if (phase === "landing") rate = THREE.MathUtils.lerp(profile.cruiseRate * 0.85, tuning.landing.flapRate, smoothStep(0.1, 0.9, progress));
 
-  if (phase === "cruise") {
+  if (phase === "cruise" && style === "slow") {
+    // Slow flight: steady, fairly deep wingbeats with no glides, body tilted up.
+    brain.gliding = false;
+    rate = profile.cruiseRate * 0.62;
+    brain.flapPhase += dt * rate;
+  } else if (phase === "cruise" && style === "swoop") {
+    // Swooping: wings held out, rocking gently instead of beating.
+    brain.gliding = false;
+    brain.flapPhase += dt * 2.4;
+  } else if (phase === "cruise") {
     if (!brain.gliding) {
       brain.flapPhase += dt * rate;
       if (brain.flapPhase >= brain.flapTarget) {
@@ -378,7 +397,13 @@ export function stepFlight(
 
   const cycle = brain.flapPhase % 1;
   const beat = (offset: number) => 2 - 2 * Math.cos(Math.PI * 2 * (cycle - offset));
-  if (brain.gliding) {
+  const rock = (offset: number) => 2.3 + 0.8 * Math.sin(Math.PI * 2 * (cycle - offset));
+  if (style === "swoop" && phase !== "takeoff") {
+    pose.wingMode = "flap";
+    pose.wingFrame = phase === "landing" ? beat(0) * 0.6 + rock(0) * 0.4 : rock(0);
+    pose.wingFrameFar = phase === "landing" ? pose.wingFrame : rock(0.08);
+    pose.tailFan = 1;
+  } else if (brain.gliding) {
     pose.wingMode = "tucked";
   } else {
     pose.wingMode = "flap";
@@ -388,6 +413,10 @@ export function stepFlight(
 
   const forward = Math.max(0.2, Math.abs(info.vx));
   pose.bodyPitch = Math.atan2(info.vy, forward) * 0.6 + 0.05 * Math.sin(Math.PI * 2 * cycle);
+  if (style === "slow") pose.bodyPitch += 0.26;
+  // Banking into each turn of the swoop.
+  if (style === "swoop" && phase === "cruise") pose.bodyPitch += 0.12 * Math.sin(Math.PI * cycle);
+  if (style === "slow" && phase === "cruise") pose.tailFan = 1;
   pose.headAngle = -0.04;
   pose.legs = 0;
 
@@ -403,7 +432,8 @@ export function stepFlight(
 
   // Bounding flight: rise during the burst, sink during the glide.
   const { amplitude, rate: undulationRate } = tuning.undulation;
-  const target = phase === "cruise" ? (brain.gliding ? -amplitude : amplitude) : 0;
+  const bounding = phase === "cruise" && style === "direct";
+  const target = bounding ? (brain.gliding ? -amplitude : amplitude) : 0;
   brain.undulation += (target - brain.undulation) * Math.min(1, dt * undulationRate * 8);
   return brain.undulation;
 }

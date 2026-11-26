@@ -7,7 +7,7 @@ import * as THREE from "three";
 import type { IntroTimeline } from "./intro";
 import { smoothStep } from "./math";
 import type { PerchPoint } from "./pine-geometry";
-import { createBrain, settleBrain, stepFlight, stepPerched, tuning, type Brain, type BirdRole, type Surface } from "./sparrow-motion";
+import { approachStyles, createBrain, settleBrain, stepFlight, stepPerched, tuning, type ApproachStyle, type Brain, type BirdRole, type Surface } from "./sparrow-motion";
 import { paintSparrowAtlas } from "./sparrow-painting";
 import { createSparrowAssets, createSparrowRig, restPose, type RigPose, type SparrowAssets, type SparrowRig } from "./sparrow-rig";
 
@@ -61,6 +61,8 @@ type Bird = {
   curve: THREE.CatmullRomCurve3 | null;
   curveLength: number;
   speed: number;
+  style: ApproachStyle;
+  lastStyle: ApproachStyle | null;
   settle: number;
   opacity: number;
 };
@@ -81,6 +83,8 @@ function createBird(role: BirdRole, index: number, assets: SparrowAssets): Bird 
     curve: null,
     curveLength: 1,
     speed: 3,
+    style: "direct",
+    lastStyle: null,
     settle: 99,
     opacity: 0,
   };
@@ -136,14 +140,47 @@ export function Sparrows({ perches, intro, reducedMotion, selectedId }: {
     const ownSide = Math.sign(target.x - 0.5) || 1;
     const side = sameSide ? ownSide : -ownSide;
     const z = target.z + randomBetween(-0.15, 0.4);
-    bird.curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * (offscreenX + Math.random()), target.y + randomBetween(2.6, 4), z),
-      new THREE.Vector3(side * randomBetween(6, 7.4), target.y + randomBetween(1.6, 2.6), z),
-      new THREE.Vector3(target.x + side * randomBetween(1.5, 2.1), target.y + randomBetween(0.6, 1.0), target.z + 0.1),
-      target.clone(),
-    ], false, "catmullrom", 0.5);
+    // Each arrival picks a different style from the bird's last one.
+    const styles = (Object.keys(approachStyles) as ApproachStyle[]).filter((name) => name !== bird.lastStyle);
+    const style = styles[Math.floor(Math.random() * styles.length)];
+    bird.style = style;
+    bird.lastStyle = style;
+    const edgeY = style === "slow" ? randomBetween(1.6, 2.2) : style === "swoop" ? randomBetween(3.4, 4.2) : randomBetween(2.6, 4);
+    const edge = new THREE.Vector3(side * (offscreenX + Math.random()), target.y + edgeY, z);
+    const landing = target.clone();
+    const at = (x: number, height: number, depth = z) => new THREE.Vector3(x, target.y + height, depth);
+    let points: THREE.Vector3[];
+    if (style === "slow") {
+      // Low and unhurried: a long, shallow glide in that stays near the height of the perch.
+      points = [
+        edge,
+        at(side * randomBetween(6.5, 7.5), randomBetween(1.4, 1.9)),
+        at(side * randomBetween(3.6, 4.4), randomBetween(1.5, 2.0)),
+        at(target.x + side * randomBetween(1.6, 2.1), randomBetween(0.7, 1.0), target.z + 0.1),
+        landing,
+      ];
+    } else if (style === "swoop") {
+      // Down from above in swings from side to side, each narrower than the last.
+      points = [
+        edge,
+        at(side * randomBetween(5.4, 6.4), randomBetween(3.1, 3.7)),
+        at(target.x + side * randomBetween(2.3, 2.9), randomBetween(2.3, 2.7)),
+        at(target.x - side * randomBetween(1.5, 1.9), randomBetween(1.6, 1.9)),
+        at(target.x + side * randomBetween(0.9, 1.2), randomBetween(1.0, 1.2), target.z + 0.1),
+        at(target.x - side * randomBetween(0.3, 0.5), randomBetween(0.45, 0.6), target.z + 0.1),
+        landing,
+      ];
+    } else {
+      points = [
+        edge,
+        at(side * randomBetween(6, 7.4), randomBetween(1.6, 2.6)),
+        at(target.x + side * randomBetween(1.5, 2.1), randomBetween(0.6, 1.0), target.z + 0.1),
+        landing,
+      ];
+    }
+    bird.curve = new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.5);
     bird.curveLength = bird.curve.getLength();
-    bird.speed = bird.brain.profile.flightSpeed;
+    bird.speed = bird.brain.profile.flightSpeed * approachStyles[style].speed;
     bird.surface = surface;
     bird.state = "approach";
     bird.timer = 0;
@@ -220,8 +257,7 @@ export function Sparrows({ perches, intro, reducedMotion, selectedId }: {
 
       if (bird.state === "approach" && bird.curve) {
         // Constant cruise speed, then a smooth braking over the last third of the path.
-        const braking = 0.7;
-        const endSpeed = 0.35;
+        const { braking, endSpeed } = approachStyles[bird.style];
         const cruiseTime = (braking * bird.curveLength) / bird.speed;
         const brakeTime = (2 * (1 - braking) * bird.curveLength) / (bird.speed + endSpeed);
         const duration = cruiseTime + brakeTime;
@@ -239,7 +275,8 @@ export function Sparrows({ perches, intro, reducedMotion, selectedId }: {
         const speedNow = bird.timer <= cruiseTime ? bird.speed : THREE.MathUtils.lerp(bird.speed, endSpeed, (bird.timer - cruiseTime) / brakeTime);
         const vx = scratch.tangent.x * speedNow;
         const vy = scratch.tangent.y * speedNow;
-        if (Math.abs(vx) > 0.05) brain.facing = vx >= 0 ? 1 : -1;
+        // The swoop turns about at each swing; a dead band stops the bird flickering round at the turning points.
+        if (Math.abs(vx) > (bird.style === "swoop" ? 0.25 : 0.05)) brain.facing = vx >= 0 ? 1 : -1;
         const landingBlend = smoothStep(0.65, 0.96, progress);
         const lift = stepFlight(brain, dt, pose, {
           phase: progress >= 0.6 ? "landing" : "cruise",
@@ -247,6 +284,7 @@ export function Sparrows({ perches, intro, reducedMotion, selectedId }: {
           elapsed: bird.timer,
           vx: vx * brain.facing,
           vy,
+          style: bird.style,
         }) * (1 - landingBlend);
         rig.setPose(pose);
         rig.root.position.copy(scratch.point);
