@@ -341,12 +341,14 @@ export function stepPerched(brain: Brain, dt: number, pose: RigPose, surface: Su
 export type FlightPhase = "takeoff" | "cruise" | "landing";
 
 // How a bird arrives: the bounding flight, a slow, hovering one, or a wings-spread swoop that zigzags down.
-export type ApproachStyle = "direct" | "slow" | "swoop";
+export type ApproachStyle = "direct" | "slow" | "swoop" | "glide";
 
 export const approachStyles: Record<ApproachStyle, { speed: number; braking: number; endSpeed: number }> = {
   direct: { speed: 1, braking: 0.7, endSpeed: 0.35 },
   slow: { speed: 0.5, braking: 0.45, endSpeed: 0.25 },
   swoop: { speed: 0.72, braking: 0.6, endSpeed: 0.3 },
+  // Wings out and still, sinking slowly down a long, shallow slope.
+  glide: { speed: 0.46, braking: 0.55, endSpeed: 0.25 },
 };
 
 // One frame of a bird in the air. Returns a vertical offset for the bounding flight path (climb while flapping,
@@ -371,6 +373,10 @@ export function stepFlight(
     brain.gliding = false;
     rate = profile.cruiseRate * 0.62;
     brain.flapPhase += dt * rate;
+  } else if (phase === "cruise" && style === "glide") {
+    // Gliding: no wingbeats at all, only a faint flutter of the open wings.
+    brain.gliding = false;
+    brain.flapPhase += dt * 0.7;
   } else if (phase === "cruise" && style === "swoop") {
     // Swooping: wings held out, rocking gently instead of beating.
     brain.gliding = false;
@@ -398,7 +404,12 @@ export function stepFlight(
   const cycle = brain.flapPhase % 1;
   const beat = (offset: number) => 2 - 2 * Math.cos(Math.PI * 2 * (cycle - offset));
   const rock = (offset: number) => 2.3 + 0.8 * Math.sin(Math.PI * 2 * (cycle - offset));
-  if (style === "swoop" && phase !== "takeoff") {
+  if (style === "glide" && phase === "cruise") {
+    pose.wingMode = "flap";
+    pose.wingFrame = 2.1 + 0.18 * Math.sin(Math.PI * 2 * cycle);
+    pose.wingFrameFar = 2.1 + 0.18 * Math.sin(Math.PI * 2 * (cycle - 0.1));
+    pose.tailFan = 1;
+  } else if ((style === "swoop" || style === "glide") && phase !== "takeoff") {
     pose.wingMode = "flap";
     pose.wingFrame = phase === "landing" ? beat(0) * 0.6 + rock(0) * 0.4 : rock(0);
     pose.wingFrameFar = phase === "landing" ? pose.wingFrame : rock(0.08);
@@ -414,6 +425,7 @@ export function stepFlight(
   const forward = Math.max(0.2, Math.abs(info.vx));
   pose.bodyPitch = Math.atan2(info.vy, forward) * 0.6 + 0.05 * Math.sin(Math.PI * 2 * cycle);
   if (style === "slow") pose.bodyPitch += 0.26;
+  if (style === "glide" && phase === "cruise") pose.bodyPitch = pose.bodyPitch * 0.5 + 0.06;
   // Banking into each turn of the swoop.
   if (style === "swoop" && phase === "cruise") pose.bodyPitch += 0.12 * Math.sin(Math.PI * cycle);
   if (style === "slow" && phase === "cruise") pose.tailFan = 1;

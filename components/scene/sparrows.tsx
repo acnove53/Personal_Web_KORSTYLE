@@ -145,7 +145,7 @@ export function Sparrows({ perches, intro, reducedMotion, selectedId }: {
     const style = styles[Math.floor(Math.random() * styles.length)];
     bird.style = style;
     bird.lastStyle = style;
-    const edgeY = style === "slow" ? randomBetween(1.6, 2.2) : style === "swoop" ? randomBetween(3.4, 4.2) : randomBetween(2.6, 4);
+    const edgeY = style === "slow" ? randomBetween(1.6, 2.2) : style === "swoop" ? randomBetween(3.4, 4.2) : style === "glide" ? randomBetween(4.2, 5.2) : randomBetween(2.6, 4);
     const edge = new THREE.Vector3(side * (offscreenX + Math.random()), target.y + edgeY, z);
     const landing = target.clone();
     const at = (x: number, height: number, depth = z) => new THREE.Vector3(x, target.y + height, depth);
@@ -157,6 +157,15 @@ export function Sparrows({ perches, intro, reducedMotion, selectedId }: {
         at(side * randomBetween(6.5, 7.5), randomBetween(1.4, 1.9)),
         at(side * randomBetween(3.6, 4.4), randomBetween(1.5, 2.0)),
         at(target.x + side * randomBetween(1.6, 2.1), randomBetween(0.7, 1.0), target.z + 0.1),
+        landing,
+      ];
+    } else if (style === "glide") {
+      // One long, gentle slope down from high up, with a single easy bend.
+      points = [
+        edge,
+        at(side * randomBetween(7, 8), randomBetween(3.6, 4.4)),
+        at(side * randomBetween(3.6, 4.4), randomBetween(2.2, 2.8), z + 0.3),
+        at(target.x + side * randomBetween(1.4, 1.9), randomBetween(0.9, 1.2), target.z + 0.1),
         landing,
       ];
     } else if (style === "swoop") {
