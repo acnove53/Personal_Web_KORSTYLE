@@ -47,8 +47,6 @@ export const honors: { title: string; detail: string; date: string }[] = [
 // A few personal things, shown from the hollow in the trunk. Photos live in public/tmi (resized, no metadata).
 const photoBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const photo = (name: string, alt: string) => ({ src: `${photoBase}/tmi/${name}.jpg`, alt });
-// The portrait is a one-off ink-wash rendering of a photo, with a painted, uneven edge (a PNG with transparency).
-const inkPortrait = (name: string, alt: string) => ({ src: `${photoBase}/tmi/${name}.png`, alt });
 
 export type TmiCard = {
   title: string;
@@ -56,7 +54,7 @@ export type TmiCard = {
   photos?: { src: string; alt: string }[];
 };
 
-export const selfPortrait = inkPortrait("me-ink", "An ink-wash portrait of Jinyoung smiling in a beanie, standing by a mountain lake");
+export const selfPortrait = photo("me", "Jinyoung smiling in a beanie at a turquoise mountain lake");
 
 export const tmiCards: TmiCard[] = [
   {
@@ -74,7 +72,10 @@ export const tmiCards: TmiCard[] = [
   {
     title: "The peer counselor",
     text: "In the army I was a peer counselor: regular check-ins with the soldiers around me, juniors and seniors alike, and extra time for the ones who were having a hard time.",
-    photos: [photo("army", "Army portrait in front of the U.S. and Korean flags")],
+    photos: [
+      photo("counseling", "Taking notes during a counseling session with U.S. and Korean soldiers"),
+      photo("army", "Army portrait in front of the U.S. and Korean flags"),
+    ],
   },
   {
     title: "Big dogs, small zoo",
@@ -88,11 +89,15 @@ export const tmiCards: TmiCard[] = [
   {
     title: "Bass on Sundays",
     text: "I play acoustic guitar and bass. These days I serve on my church's worship team on bass.",
+    photos: [photo("bass", "Playing bass on stage with an in-ear monitor, a drum kit in the foreground")],
   },
   {
     title: "Always moving",
     text: "Four days a week at the gym and two running. I have run a 10K and I am training for a 20K. A little soccer when it comes up, and a big Manchester United fan.",
-    photos: [photo("gym", "A mirror selfie at the gym with a rack of dumbbells")],
+    photos: [
+      photo("jerseys", "Two Manchester United home shirts on the wall, with army caps and dog tags hanging on them"),
+      photo("gym", "A mirror selfie at the gym with a rack of dumbbells"),
+    ],
   },
 ];
 
