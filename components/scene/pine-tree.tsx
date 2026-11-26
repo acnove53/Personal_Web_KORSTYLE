@@ -72,11 +72,11 @@ export function PineTree({
   const needleAtlas = useMemo(() => paintNeedleAtlas(), []);
   const washTexture = useMemo(() => paintWashCloud(), []);
   const needleMesh = useMemo(
-    () => createFoliageMesh(geometry.needles, createFoliageMaterial(needleAtlas, { atlas: true, opacity: 1 }), 3),
+    () => createFoliageMesh(geometry.needles, createFoliageMaterial(needleAtlas, { atlas: true, opacity: 0.95 }), 3),
     [geometry, needleAtlas],
   );
   const washMesh = useMemo(
-    () => createFoliageMesh(geometry.washes, createFoliageMaterial(washTexture, { atlas: false, opacity: 1 }), 2),
+    () => createFoliageMesh(geometry.washes, createFoliageMaterial(washTexture, { atlas: false, opacity: 0.82 }), 2),
     [geometry, washTexture],
   );
   const foliageMaterials = [needleMesh.material, washMesh.material] as THREE.ShaderMaterial[];

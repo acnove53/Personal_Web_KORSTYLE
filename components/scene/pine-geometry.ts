@@ -13,8 +13,12 @@ export type FoliageSprite = {
 // A spot on a bare stretch of limb where a sparrow can stand: the top of the wood, and the way the branch runs.
 export type PerchPoint = {
   id: string;
+  // "branch" perches sit on a limb; "ground" ones are a strip of the cliff top a sparrow can hop and peck along.
+  kind: "branch" | "ground";
   position: THREE.Vector3;
   tangent: THREE.Vector3;
+  // A short polyline along the wood (or ground), left to right as sampled, already lifted onto the surface.
+  path: THREE.Vector3[];
 };
 
 export type PineGeometry = {
@@ -72,6 +76,30 @@ function radiusAt(stops: RadiusStop[], t: number) {
 // Limbs that carry perches: the long, bare stretches before the needle clusters, at these fractions of their length.
 const perchLimbs = ["timeslips", "travel-health", "bytefight", "jobjoe"];
 const perchStops = [0.46, 0.66];
+// How far along the limb, either side of a perch, the bird can hop.
+const perchHalfSpan = 0.06;
+
+// Strips of the flat cliff top, right of the trunk and in front of the roots, where a sparrow can feed on the ground.
+const groundStrips: { id: string; from: [number, number]; to: [number, number] }[] = [
+  { id: "ground-a", from: [3.0, 0.5], to: [3.8, 0.55] },
+  { id: "ground-b", from: [1.0, 1.0], to: [2.3, 1.0] },
+  { id: "ground-d", from: [1.5, 0.7], to: [2.6, 0.8] },
+];
+
+// The height of the cliff top under (x, z), by casting a ray straight down onto the cliff geometry.
+function createGroundSampler(cliff: THREE.BufferGeometry) {
+  const mesh = new THREE.Mesh(cliff, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  mesh.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+  const origin = new THREE.Vector3();
+  return (x: number, z: number) => {
+    origin.set(x, 3, z);
+    raycaster.set(origin, down);
+    const hit = raycaster.intersectObject(mesh, false)[0];
+    return hit ? hit.point.y : null;
+  };
+}
 
 type LimbSpec = {
   from: number;
@@ -417,6 +445,7 @@ export function buildPineGeometry() {
   const washes: FoliageSprite[] = [];
   const nodePositions: Record<string, THREE.Vector3> = {};
   const perches: PerchPoint[] = [];
+  const cliff = makeCliff();
   structureParts.push(makeOrganicTube(trunkSpline, 0.7, trunkRadius, 30, 150, 0.8, 0.14, barkAmount.trunk, { flutes: 7, fluteDepth: 0.13, twist: 0.32 }));
   structureParts.push(makeRock());
 
@@ -529,13 +558,22 @@ export function buildPineGeometry() {
       flutes: 4, fluteDepth: 0.12, twist: 0.6,
     }));
     if (limb.node && perchLimbs.includes(limb.node)) {
-      for (const [perchIndex, t] of perchStops.entries()) {
-        const point = limbCurve.getPointAt(t);
-        const tangent = limbCurve.getTangentAt(t);
+      for (const [perchIndex, centre] of perchStops.entries()) {
         // Stand on top of the wood, and a little toward the viewer so the bird is drawn in front of needles.
-        point.y += limb.radius * radiusAt(branchRadius, t) * 0.8;
-        point.z += 0.16;
-        perches.push({ id: `${limb.node}-${perchIndex}`, position: point, tangent });
+        const liftedAt = (t: number) => {
+          const point = limbCurve.getPointAt(t);
+          point.y += limb.radius * radiusAt(branchRadius, t) * 0.8;
+          point.z += 0.16;
+          return point;
+        };
+        const path = [-2, -1, 0, 1, 2].map((step) => liftedAt(centre + (step / 2) * perchHalfSpan));
+        perches.push({
+          id: `${limb.node}-${perchIndex}`,
+          kind: "branch",
+          position: liftedAt(centre),
+          tangent: limbCurve.getTangentAt(centre),
+          path,
+        });
       }
     }
     const end = limbCurve.getPointAt(1);
@@ -575,10 +613,27 @@ export function buildPineGeometry() {
     }
   }
 
+  const groundHeight = createGroundSampler(cliff);
+  for (const strip of groundStrips) {
+    const path = [0, 1, 2, 3, 4].map((step) => {
+      const t = step / 4;
+      const x = THREE.MathUtils.lerp(strip.from[0], strip.to[0], t);
+      const z = THREE.MathUtils.lerp(strip.from[1], strip.to[1], t);
+      return new THREE.Vector3(x, (groundHeight(x, z) ?? -0.1) + 0.02, z + 0.1);
+    });
+    perches.push({
+      id: strip.id,
+      kind: "ground",
+      position: path[2].clone(),
+      tangent: path[4].clone().sub(path[0]).normalize(),
+      path,
+    });
+  }
+
   return {
     structure: mergeTubeGeometries(structureParts),
     canopy: mergeTubeGeometries(canopyParts),
-    cliff: makeCliff(),
+    cliff,
     needles,
     washes,
     nodePositions,
