@@ -6,6 +6,8 @@ export type PortfolioEntry = {
   title: string;
   /** A few words: the dot's label in the scene and the chapter list's lead. */
   short: string;
+  /** When it happened, shown on the chapter list row. */
+  period: string;
   category: string;
   description: string;
   stack: string[];
@@ -75,6 +77,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "01",
     title: "TimeSlips AI-Integrated Mobile App",
     short: "TimeSlips",
+    period: "SEP 2026 – PRESENT",
     category: "SEP 2026 – PRESENT · AI / CARE",
     description: "An AI coaching platform that helps care facilitators build more meaningful moments with people living with dementia. Designed around a calm mobile workflow, with serverless services supporting timely, context-aware guidance.",
     stack: ["React Native", "AWS Serverless", "AWS Bedrock"],
@@ -86,6 +89,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "02",
     title: "AI-Powered Travel Health Coach",
     short: "Travel Health Coach",
+    period: "APR 2026",
     category: "APR 2026 · CLAUDE BUILDER CLUB · AI / HEALTH",
     description: "A context-aware recommendation agent that helps travelers make dietary and health choices with local context in mind. Prompt design connects itinerary, food, and personal needs into a practical coaching experience.",
     stack: ["Python", "LLMs", "Prompt Design"],
@@ -97,6 +101,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "03",
     title: "Neural Networks & Vision Pipelines",
     short: "Vision Pipelines",
+    period: "MAR – APR 2026",
     category: "MAR – APR 2026 · MACHINE LEARNING",
     description: "From manually implementing backpropagation for a three-layer neural network in JAX to fine-tuning VGG19 on the PACE H100 cluster, these experiments explore how learning systems behave from the inside out.",
     stack: ["JAX", "VGG19", "PACE H100"],
@@ -108,6 +113,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "04",
     title: "ByteFight 2026 Autonomous Agent",
     short: "ByteFight Agent",
+    period: "MAR – APR 2026",
     category: "MAR – APR 2026 · COMPETITION",
     description: "A Python strategy agent that reasons about a changing game state and makes decisions under strict compute-time limits. Custom pathfinding heuristics help balance search depth with fast, reliable moves.",
     stack: ["Python", "Pathfinding", "Heuristics"],
@@ -119,6 +125,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "05",
     title: "JobJoe",
     short: "JobJoe",
+    period: "AUG – DEC 2025",
     category: "AUG – DEC 2025 · TEAM PROJECT",
     description: "A global job-matching engine built on Django and backed by a carefully structured SQLite database. As Scrum Master, I led a team of five and kept delivery focused.",
     stack: ["Django", "SQLite", "Scrum"],
@@ -130,6 +137,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "06",
     title: "NorthBound College",
     short: "NorthBound",
+    period: "JUN – AUG 2026",
     category: "FULL-STACK ENGINEER · JUN – AUG 2026",
     description: "Engineered an AI-powered college admissions platform. I built typed data boundaries around model and API interactions so fast-moving product work could stay predictable and maintainable.",
     stack: ["Express", "PostgreSQL", "Gemini API", "Zod"],
@@ -141,6 +149,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "07",
     title: "19th ESC · U.S. Forces Korea",
     short: "KATUSA · USFK",
+    period: "MAR 2024 – JUL 2025",
     category: "MAR 2024 – JUL 2025 · SERGEANT",
     description: "Served as consecutive and simultaneous interpreter for the Command Sergeant Major. I bridged cultural gaps, supported leadership communications, and served as primary Executive Assistant, and led diplomatic ceremonies for 500+ personnel.",
     stack: ["Interpretation", "Leadership", "Communication"],
@@ -152,6 +161,7 @@ export const portfolioEntries: PortfolioEntry[] = [
     number: "08",
     title: "Georgia Institute of Technology",
     short: "Georgia Tech",
+    period: "2023 – 2027",
     category: "B.S. COMPUTER SCIENCE · 2023 – 2027",
     description: "Studying Computer Science on the Intelligence and Devices threads. A 3.91 GPA and Faculty Honors reflect a sustained interest in the boundary where software meets physical systems.",
     stack: ["Intelligence", "Devices", "Hardware / Software"],

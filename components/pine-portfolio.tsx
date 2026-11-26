@@ -260,7 +260,7 @@ export function PinePortfolio() {
             </div>
           )}
 
-          {showScene && !nameHeadingShown && <h1 className="sr-only">{fullName}</h1>}
+          {showScene && !nameHeadingShown && !overview && <h1 className="sr-only">{fullName}</h1>}
 
           {showScene && overview && (
             <div className="overview-layer">
@@ -438,7 +438,7 @@ function ChapterContent({ stage, scrollToStage, onOpen, highlightedId, onHighlig
             >
               <span className="chapter-list-number">{entry.number}</span>
               <span className="chapter-list-title">{entry.short}</span>
-              <span className="chapter-list-kind">{entry.category.split(" · ")[0]}</span>
+              <span className="chapter-list-kind">{entry.period}</span>
             </button>
           </li>
         ))}
@@ -526,10 +526,27 @@ function DetailCard({ entry, onClose, onOpen }: {
   onOpen: (id: string) => void;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const cardRef = useRef<HTMLElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
   const siblings = portfolioEntries.filter((item) => item.stage === entry.stage);
   const index = siblings.findIndex((item) => item.id === entry.id);
   const previous = siblings[(index - 1 + siblings.length) % siblings.length];
   const next = siblings[(index + 1) % siblings.length];
+
+  // A tall note scrolls inside the card; a soft fade at the foot says there is more below.
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const update = () => setMoreBelow(card.scrollHeight - card.clientHeight - card.scrollTop > 6);
+    update();
+    card.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(card);
+    return () => {
+      card.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [entry.id]);
 
   // Focus follows the note: on open, and again when paging to the previous or next one.
   useEffect(() => {
@@ -538,7 +555,8 @@ function DetailCard({ entry, onClose, onOpen }: {
 
   return (
     <motion.aside
-      className="detail-card"
+      ref={cardRef}
+      className={`detail-card ${moreBelow ? "has-more" : ""}`}
       role="dialog"
       aria-modal="false"
       aria-labelledby="detail-title"
@@ -583,6 +601,7 @@ function DetailCard({ entry, onClose, onOpen }: {
           {next.short} <span aria-hidden="true">→</span>
         </button>
       </div>
+      <div className="detail-fade" aria-hidden="true" />
     </motion.aside>
   );
 }
