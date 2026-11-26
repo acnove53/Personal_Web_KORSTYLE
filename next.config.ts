@@ -1,10 +1,11 @@
 import type { NextConfig } from "next";
 
-// GitHub Pages serves this project from https://<user>.github.io/<repo>/, so the deploy workflow sets
-// GITHUB_PAGES=true to build a static export under that path. Local dev and ordinary builds are unaffected.
-const repository = "Personal_Web_KORSTYLE";
+// GitHub Pages serves this repository (named <user>.github.io) from the site root, so the deploy workflow sets
+// GITHUB_PAGES=true to build a static export. If the site ever moves under a sub-path (a project site such as
+// https://<user>.github.io/<repo>/), set PAGES_BASE_PATH to that path in the workflow. Local dev and ordinary
+// builds are unaffected.
 const forPages = process.env.GITHUB_PAGES === "true";
-const basePath = forPages ? `/${repository}` : "";
+const basePath = forPages ? (process.env.PAGES_BASE_PATH ?? "") : "";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -13,7 +14,7 @@ const nextConfig: NextConfig = {
   ...(forPages
     ? {
       output: "export" as const,
-      basePath,
+      ...(basePath ? { basePath } : {}),
       trailingSlash: true,
       images: { unoptimized: true },
     }
