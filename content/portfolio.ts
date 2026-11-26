@@ -27,7 +27,7 @@ export const contact: {
   links: [
     { label: "GitHub", href: "https://github.com/acnove53" },
     // { label: "LinkedIn", href: "https://www.linkedin.com/in/..." },
-    { label: "Résumé", href: "/Jinyoung_Jeon_Resume.pdf" },
+    { label: "Résumé", href: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/Jinyoung_Jeon_Resume.pdf` },
   ],
 };
 
