@@ -313,12 +313,6 @@ export function PinePortfolio() {
         <div className="paper-grain" aria-hidden="true" />
         <div className="edge-vignette" aria-hidden="true" />
 
-        <div className="scene-caption" aria-hidden="true">
-          <span className="caption-line" />
-          <span>{stage === "branches" ? "THE CANOPY" : stage === "roots" ? "THE ROOT SYSTEM" : "THE LIVING STRUCTURE"}</span>
-          <span className="caption-coordinates">ATLANTA&nbsp; 33°45′ N&nbsp; 84°23′ W</span>
-        </div>
-
         <div className="scroll-cue" aria-hidden="true">
           <span className="scroll-cue-label">SCROLL</span>
           <span className="scroll-cue-track"><i /></span>
